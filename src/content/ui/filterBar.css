@@ -1,0 +1,121 @@
+/* ── Better Amazon Search — Filter Bar Styles ───────────────────────── */
+/* Injected inside a Shadow DOM, so these won't conflict with Amazon's styles. */
+
+:host {
+  all: initial;
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #0f1111;
+}
+
+.bas-filter-bar {
+  background: #f0f2f2;
+  border: 1px solid #d5d9d9;
+  border-radius: 8px;
+  padding: 10px 16px;
+  margin: 8px 0 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.bas-filter-bar__title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f1111;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.bas-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.bas-filter-group label {
+  font-size: 12px;
+  color: #565959;
+  font-weight: 600;
+}
+
+.bas-filter-group input[type="number"] {
+  width: 60px;
+  padding: 3px 6px;
+  border: 1px solid #a2a6ac;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.bas-filter-group input[type="range"] {
+  width: 80px;
+  accent-color: #ff9900;
+}
+
+.bas-filter-group select {
+  padding: 3px 6px;
+  border: 1px solid #a2a6ac;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+}
+
+.bas-filter-group textarea {
+  width: 180px;
+  height: 28px;
+  padding: 3px 6px;
+  border: 1px solid #a2a6ac;
+  border-radius: 4px;
+  font-size: 11px;
+  resize: vertical;
+  font-family: inherit;
+  background: #fff;
+}
+
+.bas-filter-group input[type="checkbox"] {
+  accent-color: #ff9900;
+  width: 14px;
+  height: 14px;
+}
+
+.bas-separator {
+  width: 1px;
+  height: 24px;
+  background: #d5d9d9;
+}
+
+.bas-btn {
+  padding: 4px 10px;
+  border: 1px solid #a2a6ac;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.bas-btn:hover {
+  background: #f7fafa;
+  border-color: #949494;
+}
+
+.bas-btn--primary {
+  background: #ffd814;
+  border-color: #fcd200;
+  font-weight: 600;
+}
+
+.bas-btn--primary:hover {
+  background: #f7ca00;
+}
+
+.bas-stats {
+  font-size: 11px;
+  color: #565959;
+  margin-left: auto;
+}

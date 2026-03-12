@@ -1,0 +1,55 @@
+/** Extracted data from a single Amazon product card DOM element. */
+export interface Product {
+  element: HTMLElement;
+  title: string;
+  reviewCount: number;
+  rating: number;
+  price: number | null;
+  brand: string;
+  isSponsored: boolean;
+  asin: string | null;
+}
+
+/** Brand filtering mode. */
+export type BrandMode = "off" | "dim" | "hide" | "trusted-only";
+
+/** Current state of all user-configurable filters. */
+export interface FilterState {
+  minReviews: number;
+  minRating: number | null;
+  priceMin: number | null;
+  priceMax: number | null;
+  excludeTokens: string[];
+  brandMode: BrandMode;
+  hideSponsored: boolean;
+  queryBuilder: boolean;
+}
+
+/** Shape of data stored in chrome.storage.sync. */
+export interface StorageData {
+  filters: FilterState;
+  trustedBrands: string[];
+  blockedBrands: string[];
+}
+
+/** Result of applying filters to a product. */
+export type FilterResult = "show" | "hide" | "dim";
+
+/** Default filter state. */
+export const DEFAULT_FILTERS: FilterState = {
+  minReviews: 0,
+  minRating: null,
+  priceMin: null,
+  priceMax: null,
+  excludeTokens: [],
+  brandMode: "off",
+  hideSponsored: false,
+  queryBuilder: false,
+};
+
+/** Default storage data. */
+export const DEFAULT_STORAGE: StorageData = {
+  filters: { ...DEFAULT_FILTERS },
+  trustedBrands: [],
+  blockedBrands: [],
+};
