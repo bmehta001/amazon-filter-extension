@@ -327,6 +327,30 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
+  // Prefetch Pages
+  const prefetchGroup = group("Prefetch:");
+  const prefetchInput = input("number", {
+    min: "0",
+    max: "10",
+    step: "1",
+    value: String(initialState.prefetchPages),
+    placeholder: "0",
+  });
+  prefetchInput.style.width = "45px";
+  prefetchInput.addEventListener("change", emitChange);
+  prefetchGroup.appendChild(prefetchInput);
+
+  const prefetchStatus = document.createElement("span");
+  prefetchStatus.id = "bas-prefetch-status";
+  prefetchStatus.style.fontSize = "11px";
+  prefetchStatus.style.marginLeft = "6px";
+  prefetchGroup.appendChild(prefetchStatus);
+  prefetchGroup.title =
+    "Fetch extra pages of search results in the background (0 = off, 1-10 = number of extra pages)";
+  bar.appendChild(prefetchGroup);
+
+  bar.appendChild(sep());
+
   // Query Builder toggle
   const qbGroup = group("Query Builder:");
   const qbCb = document.createElement("input");
@@ -389,6 +413,7 @@ export function createFilterBar(
       dedupCategories: Array.from(dedupCheckboxes.entries())
         .filter(([_, cb]) => cb.checked)
         .map(([id, _]) => id),
+      prefetchPages: Math.min(10, Math.max(0, parseInt(prefetchInput.value, 10) || 0)),
     };
     callbacks.onFilterChange(state);
   }
@@ -410,6 +435,16 @@ export function updateStats(
   if (el) {
     el.textContent = `Showing ${shown} of ${total} results`;
   }
+}
+
+/**
+ * Update the prefetch status text in the filter bar.
+ */
+export function updatePrefetchStatus(host: HTMLElement, text: string): void {
+  const shadow = host.shadowRoot;
+  if (!shadow) return;
+  const el = shadow.getElementById("bas-prefetch-status");
+  if (el) el.textContent = text;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

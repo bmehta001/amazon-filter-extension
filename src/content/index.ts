@@ -3,11 +3,12 @@ import { isAmazonSearchPage, buildSortByReviewsUrl, buildAmazonOnlyUrl, getSearc
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
-import { createFilterBar, updateStats } from "./ui/filterBar";
+import { createFilterBar, updateStats, updatePrefetchStatus } from "./ui/filterBar";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
+import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
 import { findDuplicates } from "./dedup";
 import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
@@ -91,6 +92,11 @@ async function main(): Promise<void> {
 
   // Initial filtering pass
   await filterAllProducts();
+
+  // Start background pagination if enabled
+  if (currentFilters.prefetchPages > 0) {
+    startBackgroundPagination();
+  }
 
   // Start observing for dynamic content
   startObserving(currentFilters);
@@ -192,12 +198,34 @@ async function filterAllProducts(): Promise<void> {
 }
 
 /**
+ * Start fetching additional search result pages in the background.
+ */
+function startBackgroundPagination(): void {
+  if (currentFilters.prefetchPages <= 0) return;
+
+  void startPagination(
+    (status) => {
+      if (filterBarHost) {
+        if (status.done) {
+          updatePrefetchStatus(filterBarHost, `✓ ${status.totalProducts} products`);
+        } else {
+          updatePrefetchStatus(filterBarHost, `Loading ${status.currentPage}/${status.totalPages}...`);
+        }
+      }
+      // The MutationObserver will automatically pick up and filter new cards
+    },
+    currentFilters.prefetchPages + 1,  // +1 because page 1 is already loaded
+  );
+}
+
+/**
  * Handle filter state changes from the filter bar.
  * Updates in-memory state immediately, saves are debounced (300ms).
  */
 function handleFilterChange(newState: FilterState): void {
   const categoriesChanged =
     JSON.stringify(currentFilters.ignoredCategories) !== JSON.stringify(newState.ignoredCategories);
+  const prefetchChanged = currentFilters.prefetchPages !== newState.prefetchPages;
   currentFilters = newState;
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
@@ -215,6 +243,19 @@ function handleFilterChange(newState: FilterState): void {
     for (const product of products) {
       if (product.asin && productInsightsMap.has(product.asin)) {
         injectReviewInsights(product.element, productInsightsMap.get(product.asin)!, currentFilters.ignoredCategories);
+      }
+    }
+  }
+
+  // Handle prefetch changes
+  if (prefetchChanged) {
+    if (currentFilters.prefetchPages > 0) {
+      startBackgroundPagination();
+    } else {
+      stopPagination();
+      removePaginatedCards();
+      if (filterBarHost) {
+        updatePrefetchStatus(filterBarHost, "");
       }
     }
   }
