@@ -1,7 +1,7 @@
 import { getProductCards } from "./extractor";
 
 const TAG = "[BAS]";
-const MAX_PAGES = 10;
+const MAX_PAGES = 20;
 const FETCH_DELAY_MS = 800;  // delay between page fetches to avoid throttling
 const PRODUCT_CARD_SELECTOR = 'div[data-component-type="s-search-result"]';
 
@@ -12,6 +12,89 @@ export type PaginationStatus = {
   totalProducts: number;
   done: boolean;
 };
+
+// ── Page awareness helpers ──────────────────────────────────────────
+
+/**
+ * Get the current page number from the URL.
+ */
+export function getCurrentPage(): number {
+  const url = new URL(window.location.href);
+  const page = parseInt(url.searchParams.get("page") || "1", 10);
+  return isNaN(page) || page < 1 ? 1 : page;
+}
+
+/**
+ * Session storage key for tracking prefetch state, scoped to the search query.
+ */
+function getSessionKey(): string {
+  const url = new URL(window.location.href);
+  const query = url.searchParams.get("k") || url.searchParams.get("field-keywords") || "";
+  return `bas-prefetch:${query}`;
+}
+
+/**
+ * Get the last prefetched page number from sessionStorage.
+ */
+function getLastPrefetchedPage(): number {
+  try {
+    const val = sessionStorage.getItem(getSessionKey());
+    return val ? parseInt(val, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Save the last prefetched page number to sessionStorage.
+ */
+function setLastPrefetchedPage(page: number): void {
+  try {
+    sessionStorage.setItem(getSessionKey(), String(page));
+  } catch {
+    // sessionStorage may be unavailable
+  }
+}
+
+/**
+ * Clear prefetch state from sessionStorage for the current search query.
+ */
+function clearPrefetchState(): void {
+  try {
+    sessionStorage.removeItem(getSessionKey());
+  } catch {}
+}
+
+// ── Page range calculation (pure, testable) ─────────────────────────
+
+/**
+ * Calculate which pages to prefetch, accounting for current page and
+ * previously-prefetched pages (stored across navigations in sessionStorage).
+ *
+ * Returns null if there are no pages left to fetch.
+ */
+export function calculatePrefetchRange(
+  currentPage: number,
+  lastPrefetched: number,
+  pagesToFetch: number,
+  maxAvailablePages: number,
+): { startPage: number; endPage: number } | null {
+  // Start from whichever is further ahead: next page or past last prefetch
+  const startPage = Math.max(currentPage + 1, lastPrefetched + 1);
+
+  // Subtract pages already fetched beyond the current page
+  const alreadyFetchedBeyondCurrent = Math.max(0, lastPrefetched - currentPage);
+  const remaining = pagesToFetch - alreadyFetchedBeyondCurrent;
+
+  if (remaining <= 0 || startPage > maxAvailablePages) {
+    return null;
+  }
+
+  const endPage = Math.min(startPage + remaining - 1, maxAvailablePages);
+  return { startPage, endPage };
+}
+
+// ── DOM helpers ─────────────────────────────────────────────────────
 
 /**
  * Build the URL for a specific search results page.
@@ -27,7 +110,6 @@ function buildPageUrl(page: number): string {
  * Looks for Amazon's pagination component.
  */
 function detectMaxPages(): number {
-  // Look for the last page number in Amazon's pagination
   const pageButtons = document.querySelectorAll(
     '.s-pagination-item:not(.s-pagination-next):not(.s-pagination-previous):not(.s-pagination-ellipsis)'
   );
@@ -36,7 +118,6 @@ function detectMaxPages(): number {
     const num = parseInt(btn.textContent?.trim() || "0", 10);
     if (num > maxPage) maxPage = num;
   }
-  // Cap at MAX_PAGES to be reasonable
   return Math.min(maxPage, MAX_PAGES);
 }
 
@@ -67,11 +148,9 @@ async function fetchPageCards(pageUrl: string): Promise<HTMLElement[]> {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const cards = doc.querySelectorAll<HTMLElement>(PRODUCT_CARD_SELECTOR);
 
-    // Import each card node into the current document
     const imported: HTMLElement[] = [];
     for (const card of cards) {
       const importedCard = document.importNode(card, true) as HTMLElement;
-      // Mark as paginated so we can identify them
       importedCard.dataset.basPaginated = "true";
       imported.push(importedCard);
     }
@@ -82,27 +161,40 @@ async function fetchPageCards(pageUrl: string): Promise<HTMLElement[]> {
   }
 }
 
-/**
- * Delay helper.
- */
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Track whether pagination is currently running. */
+// ── Pagination state ────────────────────────────────────────────────
+
 let paginationActive = false;
-/** Track ASINs already on the page to avoid true duplicates. */
 const seenAsins = new Set<string>();
 
 /**
- * Start background pagination: fetch pages 2-N and inject cards into the current page.
+ * Update Amazon's "Next" pagination link to skip past already-prefetched pages.
+ */
+export function updateNextPageLink(lastPage: number): void {
+  const nextLink = document.querySelector<HTMLAnchorElement>(
+    ".s-pagination-next:not(.s-pagination-disabled)"
+  );
+  if (nextLink?.href) {
+    const url = new URL(nextLink.href);
+    url.searchParams.set("page", String(lastPage + 1));
+    nextLink.href = url.toString();
+  }
+}
+
+/**
+ * Start background pagination: fetch additional pages and inject cards into the
+ * current page. Aware of the current page number and previously-prefetched pages
+ * so that navigating forward never re-shows already-seen products.
  *
  * @param onStatus — callback fired after each page is fetched with progress info
- * @param maxPages — override for max pages to fetch (default: auto-detect, capped at 10)
+ * @param pagesToFetch — how many extra pages to fetch beyond the current page
  */
 export async function startPagination(
   onStatus: (status: PaginationStatus) => void,
-  maxPages?: number,
+  pagesToFetch: number,
 ): Promise<void> {
   if (paginationActive) return;
   paginationActive = true;
@@ -121,13 +213,34 @@ export async function startPagination(
     if (asin) seenAsins.add(asin);
   }
 
-  const totalPages = maxPages ?? detectMaxPages();
+  const currentPage = getCurrentPage();
+  const lastPrefetched = getLastPrefetchedPage();
+  const range = calculatePrefetchRange(
+    currentPage,
+    lastPrefetched,
+    pagesToFetch,
+    detectMaxPages(),
+  );
+
+  if (!range) {
+    console.log(TAG, `No new pages to prefetch (current: ${currentPage}, last prefetched: ${lastPrefetched})`);
+    paginationActive = false;
+    onStatus({
+      currentPage: lastPrefetched || currentPage,
+      totalPages: lastPrefetched || currentPage,
+      totalProducts: existingCards.length,
+      done: true,
+    });
+    return;
+  }
+
+  const { startPage, endPage } = range;
   let totalProducts = existingCards.length;
 
-  console.log(TAG, `Starting background pagination: fetching up to ${totalPages} pages`);
+  console.log(TAG, `Prefetching pages ${startPage}–${endPage} (current: ${currentPage}, last prefetched: ${lastPrefetched})`);
 
-  for (let page = 2; page <= totalPages; page++) {
-    if (!paginationActive) break;  // allow cancellation
+  for (let page = startPage; page <= endPage; page++) {
+    if (!paginationActive) break;
 
     const pageUrl = buildPageUrl(page);
     const cards = await fetchPageCards(pageUrl);
@@ -135,34 +248,37 @@ export async function startPagination(
     let injectedCount = 0;
     for (const card of cards) {
       const asin = card.dataset.asin;
-      // Skip if we've already seen this ASIN (true duplicate, not variant)
       if (asin && seenAsins.has(asin)) continue;
       if (asin) seenAsins.add(asin);
-
       container.appendChild(card);
       injectedCount++;
     }
 
     totalProducts += injectedCount;
+    setLastPrefetchedPage(page);
+
     console.log(TAG, `Page ${page}: injected ${injectedCount} new products (${totalProducts} total)`);
 
     onStatus({
       currentPage: page,
-      totalPages,
+      totalPages: endPage,
       totalProducts,
-      done: page === totalPages,
+      done: page === endPage,
     });
 
-    // Delay before next fetch to avoid throttling
-    if (page < totalPages) {
+    if (page < endPage) {
       await delay(FETCH_DELAY_MS);
     }
   }
 
   paginationActive = false;
+
+  // Update Amazon's "Next" link to jump past all prefetched pages
+  updateNextPageLink(getLastPrefetchedPage());
+
   onStatus({
-    currentPage: totalPages,
-    totalPages,
+    currentPage: endPage,
+    totalPages: endPage,
     totalProducts,
     done: true,
   });
@@ -183,7 +299,7 @@ export function isPaginationActive(): boolean {
 }
 
 /**
- * Remove all paginated cards from the DOM.
+ * Remove all paginated cards from the DOM and clear prefetch history.
  */
 export function removePaginatedCards(): void {
   const paginated = document.querySelectorAll('[data-bas-paginated="true"]');
@@ -191,4 +307,5 @@ export function removePaginatedCards(): void {
     card.remove();
   }
   seenAsins.clear();
+  clearPrefetchState();
 }

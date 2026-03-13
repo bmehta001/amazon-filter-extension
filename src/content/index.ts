@@ -209,12 +209,12 @@ function startBackgroundPagination(): void {
         if (status.done) {
           updatePrefetchStatus(filterBarHost, `✓ ${status.totalProducts} products`);
         } else {
-          updatePrefetchStatus(filterBarHost, `Loading ${status.currentPage}/${status.totalPages}...`);
+          updatePrefetchStatus(filterBarHost, `Loading p${status.currentPage}...`);
         }
       }
       // The MutationObserver will automatically pick up and filter new cards
     },
-    currentFilters.prefetchPages + 1,  // +1 because page 1 is already loaded
+    currentFilters.prefetchPages,
   );
 }
 
