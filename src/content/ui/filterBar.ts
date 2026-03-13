@@ -2,6 +2,7 @@ import type { FilterState, BrandMode } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 import filterBarStyles from "./filterBar.css?inline";
 import { REVIEW_CATEGORIES } from "../../review/categories";
+import { DEDUP_CATEGORIES } from "../dedup";
 
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
@@ -262,6 +263,70 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
+  // Dedup Variants
+  const dedupGroup = group("Dedup Variants:");
+  const dedupCheckboxes = new Map<string, HTMLInputElement>();
+
+  const dedupToggle = document.createElement("button");
+  dedupToggle.className = "bas-btn";
+  dedupToggle.textContent = "▸ Variants (0 active)";
+  dedupToggle.style.fontSize = "11px";
+
+  const dedupContainer = document.createElement("div");
+  dedupContainer.style.display = "none";
+  dedupContainer.style.flexDirection = "column";
+  dedupContainer.style.gap = "2px";
+  dedupContainer.style.marginTop = "4px";
+
+  for (const cat of DEDUP_CATEGORIES) {
+    const wrapper = document.createElement("label");
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "center";
+    wrapper.style.gap = "4px";
+    wrapper.style.fontSize = "11px";
+    wrapper.style.cursor = "pointer";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = initialState.dedupCategories.includes(cat.id);
+    cb.addEventListener("change", () => {
+      const count = Array.from(dedupCheckboxes.values()).filter(
+        (c) => c.checked,
+      ).length;
+      dedupToggle.textContent = `${dedupContainer.style.display === "none" ? "▸" : "▾"} Variants (${count} active)`;
+      emitChange();
+    });
+    dedupCheckboxes.set(cat.id, cb);
+
+    const labelText = document.createElement("span");
+    labelText.textContent = `${cat.icon} ${cat.label}`;
+
+    wrapper.append(cb, labelText);
+    dedupContainer.appendChild(wrapper);
+  }
+
+  dedupToggle.addEventListener("click", () => {
+    const collapsed = dedupContainer.style.display === "none";
+    dedupContainer.style.display = collapsed ? "flex" : "none";
+    const count = Array.from(dedupCheckboxes.values()).filter(
+      (c) => c.checked,
+    ).length;
+    dedupToggle.textContent = `${collapsed ? "▾" : "▸"} Variants (${count} active)`;
+  });
+
+  // Set initial toggle text
+  const initialDedup = Array.from(dedupCheckboxes.values()).filter(
+    (c) => c.checked,
+  ).length;
+  if (initialDedup > 0) {
+    dedupToggle.textContent = `▸ Variants (${initialDedup} active)`;
+  }
+
+  dedupGroup.append(dedupToggle, dedupContainer);
+  bar.appendChild(dedupGroup);
+
+  bar.appendChild(sep());
+
   // Query Builder toggle
   const qbGroup = group("Query Builder:");
   const qbCb = document.createElement("input");
@@ -319,6 +384,9 @@ export function createFilterBar(
       minReviewQuality: parseInt(qualityInput.value, 10) || 0,
       useMLAnalysis: mlCb.checked,
       ignoredCategories: Array.from(categoryCheckboxes.entries())
+        .filter(([_, cb]) => cb.checked)
+        .map(([id, _]) => id),
+      dedupCategories: Array.from(dedupCheckboxes.entries())
         .filter(([_, cb]) => cb.checked)
         .map(([id, _]) => id),
     };

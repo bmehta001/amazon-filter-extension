@@ -8,6 +8,7 @@ import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
+import { findDuplicates } from "./dedup";
 import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
@@ -120,6 +121,8 @@ async function filterAllProducts(): Promise<void> {
   const products = extractAllProducts();
   let shown = 0;
 
+  // First pass: apply individual filters
+  const filterResults: ("show" | "hide" | "dim")[] = [];
   for (const product of products) {
     // Attach cached review quality if available
     if (product.asin && reviewScoreMap.has(product.asin)) {
@@ -132,6 +135,39 @@ async function filterAllProducts(): Promise<void> {
     }
 
     const result = await applyFilters(product, currentFilters);
+    filterResults.push(result);
+  }
+
+  // Second pass: apply variant deduplication among non-hidden products
+  let dedupSet = new Set<number>();
+  if (currentFilters.dedupCategories.length > 0) {
+    // Build list of products that survived individual filters
+    const visibleProducts: Product[] = [];
+    const visibleIndices: number[] = [];
+    for (let i = 0; i < products.length; i++) {
+      if (filterResults[i] !== "hide") {
+        visibleProducts.push(products[i]);
+        visibleIndices.push(i);
+      }
+    }
+    // Find duplicates among visible products
+    const visibleDups = findDuplicates(visibleProducts, currentFilters.dedupCategories);
+    // Map back to original indices
+    for (const vi of visibleDups) {
+      dedupSet.add(visibleIndices[vi]);
+    }
+  }
+
+  // Third pass: apply results to DOM
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i];
+    let result = filterResults[i];
+
+    // Override to hide if it's a duplicate variant
+    if (dedupSet.has(i)) {
+      result = "hide";
+    }
+
     applyFilterResult(product.element, result);
 
     if (result !== "hide") {

@@ -30,6 +30,7 @@ export interface FilterState {
   minReviewQuality: number;
   useMLAnalysis: boolean;
   ignoredCategories: string[];
+  dedupCategories: string[];
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -55,6 +56,7 @@ export const DEFAULT_FILTERS: FilterState = {
   minReviewQuality: 0,
   useMLAnalysis: false,
   ignoredCategories: [],
+  dedupCategories: [],
 };
 
 /** Default storage data. */
