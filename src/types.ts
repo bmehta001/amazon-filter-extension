@@ -10,6 +10,8 @@ export interface Product {
   asin: string | null;
   /** Review quality score (0-100), set asynchronously after fetch. */
   reviewQuality?: number;
+  /** Rating recalculated after excluding ignored review categories. */
+  adjustedRating?: number;
 }
 
 /** Brand filtering mode. */
@@ -27,6 +29,7 @@ export interface FilterState {
   queryBuilder: boolean;
   minReviewQuality: number;
   useMLAnalysis: boolean;
+  ignoredCategories: string[];
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -51,6 +54,7 @@ export const DEFAULT_FILTERS: FilterState = {
   queryBuilder: false,
   minReviewQuality: 0,
   useMLAnalysis: false,
+  ignoredCategories: [],
 };
 
 /** Default storage data. */

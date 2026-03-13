@@ -1,6 +1,7 @@
 import type { FilterState, BrandMode } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 import filterBarStyles from "./filterBar.css?inline";
+import { REVIEW_CATEGORIES } from "../../review/categories";
 
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
@@ -194,6 +195,73 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
+  // Ignore Categories
+  const catGroup = group("Ignore Categories:");
+  const categoryCheckboxes = new Map<string, HTMLInputElement>();
+
+  const catToggle = document.createElement("button");
+  catToggle.className = "bas-btn";
+  catToggle.textContent = "▸ Categories (0 ignored)";
+  catToggle.style.fontSize = "11px";
+
+  const catContainer = document.createElement("div");
+  catContainer.style.display = "none";
+  catContainer.style.flexDirection = "column";
+  catContainer.style.gap = "2px";
+  catContainer.style.marginTop = "4px";
+
+  const nonProductCategories = REVIEW_CATEGORIES.filter(
+    (c) => !c.isProductRelated,
+  );
+  for (const cat of nonProductCategories) {
+    const wrapper = document.createElement("label");
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "center";
+    wrapper.style.gap = "4px";
+    wrapper.style.fontSize = "11px";
+    wrapper.style.cursor = "pointer";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = initialState.ignoredCategories.includes(cat.id);
+    cb.addEventListener("change", () => {
+      const count = Array.from(categoryCheckboxes.values()).filter(
+        (c) => c.checked,
+      ).length;
+      catToggle.textContent = `${catContainer.style.display === "none" ? "▸" : "▾"} Categories (${count} ignored)`;
+      emitChange();
+    });
+    categoryCheckboxes.set(cat.id, cb);
+
+    const labelText = document.createElement("span");
+    labelText.textContent = `${cat.icon} ${cat.label}`;
+
+    wrapper.append(cb, labelText);
+    catContainer.appendChild(wrapper);
+  }
+
+  catToggle.addEventListener("click", () => {
+    const collapsed = catContainer.style.display === "none";
+    catContainer.style.display = collapsed ? "flex" : "none";
+    const count = Array.from(categoryCheckboxes.values()).filter(
+      (c) => c.checked,
+    ).length;
+    catToggle.textContent = `${collapsed ? "▾" : "▸"} Categories (${count} ignored)`;
+  });
+
+  // Set initial toggle text
+  const initialIgnored = Array.from(categoryCheckboxes.values()).filter(
+    (c) => c.checked,
+  ).length;
+  if (initialIgnored > 0) {
+    catToggle.textContent = `▸ Categories (${initialIgnored} ignored)`;
+  }
+
+  catGroup.append(catToggle, catContainer);
+  bar.appendChild(catGroup);
+
+  bar.appendChild(sep());
+
   // Query Builder toggle
   const qbGroup = group("Query Builder:");
   const qbCb = document.createElement("input");
@@ -250,6 +318,9 @@ export function createFilterBar(
       queryBuilder: qbCb.checked,
       minReviewQuality: parseInt(qualityInput.value, 10) || 0,
       useMLAnalysis: mlCb.checked,
+      ignoredCategories: Array.from(categoryCheckboxes.entries())
+        .filter(([_, cb]) => cb.checked)
+        .map(([id, _]) => id),
     };
     callbacks.onFilterChange(state);
   }

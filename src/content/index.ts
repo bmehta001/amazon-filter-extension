@@ -6,12 +6,14 @@ import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats } from "./ui/filterBar";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
+import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
+import { getProductInsights } from "../review/categories";
 import type { FilterState, Product } from "../types";
-import type { ReviewScore } from "../review/types";
+import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
 // CSS classes for product card visual states
 const GLOBAL_STYLES = `
@@ -20,6 +22,7 @@ const GLOBAL_STYLES = `
   .bas-dimmed:hover { opacity: 0.8; }
   .bas-trusted { border-left: 3px solid #067d62 !important; }
 ${REVIEW_BADGE_STYLES}
+${REVIEW_INSIGHTS_STYLES}
 `;
 
 // CSS to hide the top sponsored carousel/slot
@@ -41,6 +44,10 @@ let filterBarHost: HTMLElement | null = null;
 const fetchReview = createRateLimitedFetcher(2, 500);
 /** Map ASIN → ReviewScore for products already scored this session. */
 const reviewScoreMap = new Map<string, ReviewScore>();
+/** Map ASIN → ProductInsights for category breakdown. */
+const productInsightsMap = new Map<string, ProductInsights>();
+/** Map ASIN → raw review data for recomputing insights when categories change. */
+const reviewDataMap = new Map<string, ProductReviewData>();
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -119,6 +126,11 @@ async function filterAllProducts(): Promise<void> {
       product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
     }
 
+    // Attach adjusted rating if categories are being ignored
+    if (product.asin && productInsightsMap.has(product.asin) && currentFilters.ignoredCategories.length > 0) {
+      product.adjustedRating = productInsightsMap.get(product.asin)!.adjustedRating;
+    }
+
     const result = await applyFilters(product, currentFilters);
     applyFilterResult(product.element, result);
 
@@ -148,11 +160,29 @@ async function filterAllProducts(): Promise<void> {
  * Updates in-memory state immediately, saves are debounced (300ms).
  */
 function handleFilterChange(newState: FilterState): void {
+  const categoriesChanged =
+    JSON.stringify(currentFilters.ignoredCategories) !== JSON.stringify(newState.ignoredCategories);
   currentFilters = newState;
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
   updateObserverFilters(currentFilters);
   updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
+
+  // Recompute insights if ignored categories changed
+  if (categoriesChanged) {
+    for (const [asin, reviewData] of reviewDataMap) {
+      const insights = getProductInsights(reviewData.reviews, currentFilters.ignoredCategories);
+      productInsightsMap.set(asin, insights);
+    }
+    // Re-inject insights panels on all visible product cards
+    const products = extractAllProducts();
+    for (const product of products) {
+      if (product.asin && productInsightsMap.has(product.asin)) {
+        injectReviewInsights(product.element, productInsightsMap.get(product.asin)!, currentFilters.ignoredCategories);
+      }
+    }
+  }
+
   filterAllProducts();
 }
 
@@ -248,6 +278,10 @@ function queueReviewAnalysis(products: Product[]): void {
     if (reviewScoreMap.has(asin)) {
       const score = reviewScoreMap.get(asin)!;
       injectReviewBadge(product.element, score);
+      // Also inject insights if available
+      if (productInsightsMap.has(asin)) {
+        injectReviewInsights(product.element, productInsightsMap.get(asin)!, currentFilters.ignoredCategories);
+      }
       continue;
     }
 
@@ -259,9 +293,10 @@ function queueReviewAnalysis(products: Product[]): void {
       try {
         // Try cache first
         let score = await getCachedScore(asin);
+        let reviewData: ProductReviewData | null = null;
         if (!score) {
           // Fetch and analyze
-          const reviewData = await fetchReview(asin);
+          reviewData = await fetchReview(asin);
           // Only score if we got meaningful data
           if (reviewData.histogram || reviewData.reviews.length > 0) {
             score = currentFilters.useMLAnalysis
@@ -278,6 +313,19 @@ function queueReviewAnalysis(products: Product[]): void {
           // Attach score to product and re-apply filter if quality threshold is set
           if (currentFilters.minReviewQuality > 0) {
             product.reviewQuality = score.score;
+            const result = await applyFilters(product, currentFilters);
+            applyFilterResult(product.element, result);
+          }
+        }
+
+        // Compute and inject category insights
+        if (reviewData && reviewData.reviews.length > 0) {
+          reviewDataMap.set(asin, reviewData);
+          const insights = getProductInsights(reviewData.reviews, currentFilters.ignoredCategories);
+          productInsightsMap.set(asin, insights);
+          injectReviewInsights(product.element, insights, currentFilters.ignoredCategories);
+          if (currentFilters.ignoredCategories.length > 0) {
+            product.adjustedRating = insights.adjustedRating;
             const result = await applyFilters(product, currentFilters);
             applyFilterResult(product.element, result);
           }

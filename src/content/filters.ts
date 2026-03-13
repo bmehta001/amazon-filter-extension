@@ -25,9 +25,15 @@ export async function applyFilters(
     return "hide";
   }
 
-  // P3: Minimum rating
-  if (state.minRating !== null && product.rating > 0 && product.rating < state.minRating) {
-    return "hide";
+  // P3: Minimum rating (use adjusted rating if categories are being ignored)
+  if (state.minRating !== null && product.rating > 0) {
+    const effectiveRating =
+      product.adjustedRating !== undefined && state.ignoredCategories.length > 0
+        ? product.adjustedRating
+        : product.rating;
+    if (effectiveRating < state.minRating) {
+      return "hide";
+    }
   }
 
   // P4: Price range

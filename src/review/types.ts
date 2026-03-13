@@ -53,3 +53,39 @@ export interface CachedReviewScore {
   /** Unix timestamp when cached. */
   cachedAt: number;
 }
+
+/** Result of categorizing a single review. */
+export interface CategorizedReview {
+  review: ReviewData;
+  /** Category IDs that matched this review. */
+  categories: string[];
+  /** The category with the strongest keyword match, or null. */
+  primaryCategory: string | null;
+}
+
+/** Summary of one category across all reviews. */
+export interface CategorySummary {
+  categoryId: string;
+  count: number;
+  percentage: number;
+  avgRating: number;
+  /** First ~80 chars of a representative matching review. */
+  sampleSnippet: string;
+}
+
+/** Full categorization + adjusted rating result for a product. */
+export interface ProductInsights {
+  categorySummaries: CategorySummary[];
+  categorizedReviews: CategorizedReview[];
+  /** Rating recalculated excluding reviews in ignored categories. */
+  adjustedRating: number;
+  /** Review count after excluding ignored categories. */
+  adjustedReviewCount: number;
+}
+
+/** Cache entry for product insights. */
+export interface CachedProductInsights {
+  asin: string;
+  insights: ProductInsights;
+  cachedAt: number;
+}
