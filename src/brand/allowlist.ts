@@ -33,10 +33,26 @@ export async function initAllowlist(): Promise<void> {
   loaded = true;
 }
 
-/** Check if a brand is in the allowlist. */
+/** Check if a brand is in the allowlist (exact or prefix match). */
 export function isAllowlisted(brand: string): boolean {
   if (!loaded) return false; // Fail open until loaded
-  return allowlistSet.has(brand.trim().toLowerCase());
+  const lower = brand.trim().toLowerCase();
+  if (!lower || lower === "unknown") return false;
+  // Exact match
+  if (allowlistSet.has(lower)) return true;
+  // Check if the extracted brand starts with or contains an allowlisted brand
+  // e.g., "Philips Audio" matches "philips", "JBL Professional" matches "jbl"
+  for (const entry of allowlistSet) {
+    if (entry.length >= 3 && (lower.startsWith(entry + " ") || lower.startsWith(entry + "-"))) {
+      return true;
+    }
+    // Also check if an allowlist entry starts with the extracted brand
+    // e.g., extracted "Philips" should match "philips hue" in the allowlist
+    if (lower.length >= 3 && entry.startsWith(lower + " ")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Check if a brand is explicitly blocked by the user. */

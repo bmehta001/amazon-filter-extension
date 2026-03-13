@@ -13,10 +13,12 @@ import { extractProduct } from "../src/content/extractor";
 function createMockCard(opts: {
   title?: string;
   reviewCount?: string;
+  reviewCountLink?: boolean;
   rating?: string;
   price?: string;
   brand?: string;
   sponsored?: boolean;
+  sponsoredType?: "classic" | "ads-metrics" | "sp-sponsored" | "data-attr" | "aria-label" | "ad-holder";
   asin?: string;
 } = {}): HTMLElement {
   const card = document.createElement("div");
@@ -36,10 +38,19 @@ function createMockCard(opts: {
 
   // Review count
   if (opts.reviewCount) {
-    const reviewSpan = document.createElement("span");
-    reviewSpan.className = "a-size-base s-underline-text";
-    reviewSpan.textContent = opts.reviewCount;
-    card.appendChild(reviewSpan);
+    if (opts.reviewCountLink) {
+      const reviewLink = document.createElement("a");
+      reviewLink.href = "#customerReviews";
+      const reviewSpan = document.createElement("span");
+      reviewSpan.textContent = opts.reviewCount;
+      reviewLink.appendChild(reviewSpan);
+      card.appendChild(reviewLink);
+    } else {
+      const reviewSpan = document.createElement("span");
+      reviewSpan.className = "a-size-base s-underline-text";
+      reviewSpan.textContent = opts.reviewCount;
+      card.appendChild(reviewSpan);
+    }
   }
 
   // Rating
@@ -74,10 +85,31 @@ function createMockCard(opts: {
 
   // Sponsored
   if (opts.sponsored) {
-    const sponsoredSpan = document.createElement("span");
-    sponsoredSpan.className = "a-color-secondary";
-    sponsoredSpan.textContent = "Sponsored";
-    card.appendChild(sponsoredSpan);
+    const type = opts.sponsoredType || "classic";
+    if (type === "classic") {
+      const sponsoredSpan = document.createElement("span");
+      sponsoredSpan.className = "a-color-secondary";
+      sponsoredSpan.textContent = "Sponsored";
+      card.appendChild(sponsoredSpan);
+    } else if (type === "ads-metrics") {
+      const metricsSpan = document.createElement("span");
+      metricsSpan.setAttribute("data-component-type", "s-ads-metrics");
+      card.appendChild(metricsSpan);
+    } else if (type === "sp-sponsored") {
+      const spSpan = document.createElement("span");
+      spSpan.setAttribute("data-component-type", "sp-sponsored-result");
+      card.appendChild(spSpan);
+    } else if (type === "data-attr") {
+      card.dataset.isSponsored = "true";
+    } else if (type === "aria-label") {
+      const labelSpan = document.createElement("span");
+      labelSpan.setAttribute("aria-label", "Sponsored ad from brand");
+      card.appendChild(labelSpan);
+    } else if (type === "ad-holder") {
+      const adDiv = document.createElement("div");
+      adDiv.className = "AdHolder";
+      card.appendChild(adDiv);
+    }
   }
 
   return card;
@@ -94,6 +126,18 @@ describe("extractProduct", () => {
     const card = createMockCard({ reviewCount: "1,234" });
     const product = extractProduct(card);
     expect(product.reviewCount).toBe(1234);
+  });
+
+  it("extracts review count with K suffix", () => {
+    const card = createMockCard({ reviewCount: "2.5K" });
+    const product = extractProduct(card);
+    expect(product.reviewCount).toBe(2500);
+  });
+
+  it("extracts review count from customerReviews link", () => {
+    const card = createMockCard({ reviewCount: "12,345", reviewCountLink: true });
+    const product = extractProduct(card);
+    expect(product.reviewCount).toBe(12345);
   });
 
   it("extracts rating from aria-label", () => {
@@ -114,8 +158,50 @@ describe("extractProduct", () => {
     expect(product.brand).toBe("Sony");
   });
 
-  it("detects sponsored products", () => {
-    const card = createMockCard({ sponsored: true });
+  it("cleans up 'Visit the X Store' brand text", () => {
+    const card = createMockCard({ brand: "Visit the Philips Store" });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Philips");
+  });
+
+  it("returns Unknown for generic title-only brand fallback", () => {
+    const card = createMockCard({ title: "Wireless Headphones Pro" });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Unknown");
+  });
+
+  it("detects sponsored products (classic)", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "classic" });
+    const product = extractProduct(card);
+    expect(product.isSponsored).toBe(true);
+  });
+
+  it("detects sponsored via ads-metrics component", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "ads-metrics" });
+    const product = extractProduct(card);
+    expect(product.isSponsored).toBe(true);
+  });
+
+  it("detects sponsored via sp-sponsored-result", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "sp-sponsored" });
+    const product = extractProduct(card);
+    expect(product.isSponsored).toBe(true);
+  });
+
+  it("detects sponsored via data attribute", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "data-attr" });
+    const product = extractProduct(card);
+    expect(product.isSponsored).toBe(true);
+  });
+
+  it("detects sponsored via aria-label", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "aria-label" });
+    const product = extractProduct(card);
+    expect(product.isSponsored).toBe(true);
+  });
+
+  it("detects sponsored via AdHolder div", () => {
+    const card = createMockCard({ sponsored: true, sponsoredType: "ad-holder" });
     const product = extractProduct(card);
     expect(product.isSponsored).toBe(true);
   });

@@ -1,11 +1,14 @@
-/** Parse a numeric string like "1,234" or "12.5K" into a number. */
+/** Parse a numeric string like "1,234", "12.5K", or "1.2M" into a number. */
 export function parseCount(text: string): number {
   if (!text) return 0;
   const cleaned = text.trim().replace(/,/g, "");
-  // Handle "1.2K" style abbreviations
-  const kMatch = cleaned.match(/^([\d.]+)\s*[kK]$/);
-  if (kMatch) {
-    return Math.round(parseFloat(kMatch[1]) * 1000);
+  // Handle "1.2K", "3.5M", "1B" style abbreviations
+  const abbrMatch = cleaned.match(/^([\d.]+)\s*([kKmMbB])$/);
+  if (abbrMatch) {
+    const value = parseFloat(abbrMatch[1]);
+    const suffix = abbrMatch[2].toLowerCase();
+    const multiplier = suffix === "k" ? 1_000 : suffix === "m" ? 1_000_000 : 1_000_000_000;
+    return Math.round(value * multiplier);
   }
   const num = parseInt(cleaned, 10);
   return isNaN(num) ? 0 : num;

@@ -15,6 +15,13 @@ describe("parseCount", () => {
     expect(parseCount("1.2K")).toBe(1200);
     expect(parseCount("1.2k")).toBe(1200);
     expect(parseCount("50K")).toBe(50000);
+    expect(parseCount("2.5K")).toBe(2500);
+  });
+
+  it("parses M and B abbreviations", () => {
+    expect(parseCount("1.5M")).toBe(1500000);
+    expect(parseCount("2m")).toBe(2000000);
+    expect(parseCount("1.2B")).toBe(1200000000);
   });
 
   it("returns 0 for empty/invalid input", () => {

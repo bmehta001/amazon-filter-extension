@@ -10,9 +10,6 @@ const SELECTORS = {
   titleLink: "h2 a.a-link-normal",
   /** Title text span. */
   titleText: "h2 a span, h2 span.a-text-normal",
-  /** Review count (e.g. "1,234"). */
-  reviewCount:
-    'span[data-component-type="s-client-side-analytics"] span.a-size-base.s-underline-text, a[href*="customerReviews"] span.a-size-base, span.a-size-base.s-underline-text',
   /** Star rating (aria-label like "4.5 out of 5 stars"). */
   rating: 'i.a-icon-star-small span.a-icon-alt, span[aria-label*="star"]',
   /** Price (offscreen or visible). */
@@ -22,9 +19,6 @@ const SELECTORS = {
   /** Brand name line below the title. */
   brand:
     "span.a-size-base-plus.a-color-base, h5.s-line-clamp-1 span, span.a-size-base.a-color-secondary + span",
-  /** Sponsored label. */
-  sponsored:
-    'span.a-color-secondary:not(.a-text-normal), span[data-component-type="s-ads-metrics"]',
 } as const;
 
 /**
@@ -73,8 +67,37 @@ function extractTitle(card: HTMLElement): string {
 }
 
 function extractReviewCount(card: HTMLElement): number {
-  const el = card.querySelector(SELECTORS.reviewCount);
-  return parseCount(el?.textContent || "");
+  // Priority 1: link to customer reviews (most reliable)
+  const reviewLink = card.querySelector<HTMLAnchorElement>('a[href*="customerReviews"]');
+  if (reviewLink) {
+    const linkSpan = reviewLink.querySelector("span");
+    const text = (linkSpan?.textContent || reviewLink.textContent || "").trim();
+    const count = parseCount(text);
+    if (count > 0) return count;
+  }
+
+  // Priority 2: underlined spans that look like review counts
+  const underlined = card.querySelectorAll("span.s-underline-text");
+  for (const span of underlined) {
+    const text = span.textContent?.trim() || "";
+    if (/^[\d,.]+[kKmMbB]?$/.test(text)) {
+      const count = parseCount(text);
+      if (count > 0) return count;
+    }
+  }
+
+  // Priority 3: aria-label containing review info
+  const ariaEls = card.querySelectorAll('[aria-label*="rating" i], [aria-label*="review" i]');
+  for (const el of ariaEls) {
+    const label = el.getAttribute("aria-label") || "";
+    const match = label.match(/([\d,.]+[kKmMbB]?)\s*(?:rating|review)/i);
+    if (match) {
+      const count = parseCount(match[1]);
+      if (count > 0) return count;
+    }
+  }
+
+  return 0;
 }
 
 function extractRating(card: HTMLElement): number {
@@ -103,39 +126,90 @@ function extractBrand(card: HTMLElement, title: string): string {
   // Try explicit brand element
   const brandEl = card.querySelector(SELECTORS.brand);
   if (brandEl?.textContent?.trim()) {
-    const text = brandEl.textContent.trim();
-    // Filter out common false positives
+    let text = brandEl.textContent.trim();
+    // Clean up common Amazon wrapping patterns
+    text = text
+      .replace(/^visit\s+the\s+/i, "")
+      .replace(/\s+store$/i, "")
+      .replace(/\s+shop$/i, "")
+      .replace(/^see\s+all\s+.*$/i, "")
+      .replace(/^shop\s+/i, "")
+      .trim();
     if (
+      text.length > 0 &&
       text.length < 100 &&
-      !text.includes("result") &&
-      !text.startsWith("$")
+      !text.toLowerCase().includes("result") &&
+      !text.startsWith("$") &&
+      !text.toLowerCase().startsWith("see ")
     ) {
       return text;
     }
   }
-  // Fallback: look for "by BrandName" or "Visit the BrandName Store" patterns
+
+  // Fallback: look for "Visit the X Store" pattern (common on Amazon)
+  const visitPattern = card.textContent?.match(
+    /Visit the\s+(.+?)\s+Store/i,
+  );
+  if (visitPattern) {
+    return visitPattern[1].trim();
+  }
+
+  // Fallback: "by BrandName" or "Brand: BrandName"
   const byPattern = card.textContent?.match(
     /(?:by|Brand:)\s+([A-Za-z0-9][A-Za-z0-9 &'.+-]{1,40})/,
   );
   if (byPattern) {
     return byPattern[1].trim();
   }
-  // Last resort: use first few words of title as a guess
-  return title.split(/\s+/).slice(0, 2).join(" ");
+
+  // Last resort: first few words of title, but only if they look brand-like
+  const titleStart = title.split(/\s+/).slice(0, 2).join(" ");
+  if (!/^(the|a|an|best|top|new|wireless|electric|portable|premium)\b/i.test(titleStart)) {
+    return titleStart;
+  }
+
+  return "Unknown";
 }
 
 function detectSponsored(card: HTMLElement): boolean {
-  // Check for the ads metrics component
+  // 1. Modern ads metrics component
   if (card.querySelector('span[data-component-type="s-ads-metrics"]')) {
     return true;
   }
-  // Check for "Sponsored" text
-  const spans = card.querySelectorAll("span.a-color-secondary");
-  for (const span of spans) {
-    if (span.textContent?.trim().toLowerCase() === "sponsored") {
+
+  // 2. Newer sponsored result marker
+  if (card.querySelector('[data-component-type="sp-sponsored-result"]')) {
+    return true;
+  }
+
+  // 3. Ad holder containers
+  if (card.querySelector("div.AdHolder, div.s-ad-holder")) {
+    return true;
+  }
+
+  // 4. Data attributes on the card itself
+  if (card.dataset.isSponsored === "true" || card.dataset.sponsored === "true") {
+    return true;
+  }
+
+  // 5. Aria-labels containing "Sponsored"
+  const ariaEls = card.querySelectorAll("[aria-label]");
+  for (const el of ariaEls) {
+    const label = el.getAttribute("aria-label") || "";
+    if (/\bsponsored\b/i.test(label)) {
       return true;
     }
   }
+
+  // 6. Text-based "Sponsored" in secondary spans (classic pattern)
+  const spans = card.querySelectorAll("span.a-color-secondary, span.puis-label-popover-default");
+  for (const span of spans) {
+    const text = span.textContent?.trim().toLowerCase() || "";
+    if (text === "sponsored" || text === "ad" || /^sponsored\b/.test(text)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
