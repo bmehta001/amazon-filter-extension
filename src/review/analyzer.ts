@@ -320,3 +320,51 @@ export function computeReviewScore(data: ProductReviewData): ReviewScore {
 
   return { score, label, breakdown, computedAt: Date.now() };
 }
+
+/**
+ * Compute a review-authenticity score enhanced with ML sentiment analysis.
+ *
+ * Starts from the heuristic score, then averages per-review ML sentiment
+ * mismatch deductions and subtracts them.
+ */
+export async function computeReviewScoreWithML(
+  data: ProductReviewData,
+): Promise<ReviewScore> {
+  const base = computeReviewScore(data);
+
+  const { detectSentimentMismatch, isModelLoaded } = await import(
+    "./mlSentiment"
+  );
+
+  if (!isModelLoaded()) return base;
+
+  let totalMLDeduction = 0;
+  const mlReasons = new Set<string>();
+
+  for (const review of data.reviews) {
+    const result = await detectSentimentMismatch(review.text, review.rating);
+    totalMLDeduction += result.deduction;
+    if (result.reason) mlReasons.add(result.reason);
+  }
+
+  const avgMLDeduction =
+    data.reviews.length > 0 ? totalMLDeduction / data.reviews.length : 0;
+
+  if (avgMLDeduction === 0) return base;
+
+  const rawScore = base.score - avgMLDeduction;
+  const score = clamp(Math.round(rawScore), 0, 100);
+
+  let label: ReviewScore["label"];
+  if (score >= 80) label = "authentic";
+  else if (score >= 50) label = "mixed";
+  else label = "suspicious";
+
+  const breakdown: ScoreBreakdown = {
+    ...base.breakdown,
+    mlDeduction: avgMLDeduction,
+    reasons: [...base.breakdown.reasons, ...Array.from(mlReasons)],
+  };
+
+  return { score, label, breakdown, computedAt: Date.now() };
+}

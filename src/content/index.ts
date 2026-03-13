@@ -8,7 +8,7 @@ import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { createRateLimitedFetcher } from "../review/fetcher";
-import { computeReviewScore } from "../review/analyzer";
+import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
 import type { FilterState, Product } from "../types";
 import type { ReviewScore } from "../review/types";
@@ -264,7 +264,9 @@ function queueReviewAnalysis(products: Product[]): void {
           const reviewData = await fetchReview(asin);
           // Only score if we got meaningful data
           if (reviewData.histogram || reviewData.reviews.length > 0) {
-            score = computeReviewScore(reviewData);
+            score = currentFilters.useMLAnalysis
+              ? await computeReviewScoreWithML(reviewData)
+              : computeReviewScore(reviewData);
             await setCachedScore(asin, score).catch(() => {});
           }
         }

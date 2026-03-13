@@ -181,6 +181,19 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
+  // AI Analysis
+  const mlGroup = group("🤖 AI Analysis:");
+  const mlCb = document.createElement("input");
+  mlCb.type = "checkbox";
+  mlCb.checked = initialState.useMLAnalysis ?? false;
+  mlCb.addEventListener("change", emitChange);
+  mlGroup.appendChild(mlCb);
+  mlGroup.title =
+    "Use ML sentiment analysis to detect rating/text mismatches (loads a small AI model)";
+  bar.appendChild(mlGroup);
+
+  bar.appendChild(sep());
+
   // Query Builder toggle
   const qbGroup = group("Query Builder:");
   const qbCb = document.createElement("input");
@@ -236,6 +249,7 @@ export function createFilterBar(
       hideSponsored: sponsoredCb.checked,
       queryBuilder: qbCb.checked,
       minReviewQuality: parseInt(qualityInput.value, 10) || 0,
+      useMLAnalysis: mlCb.checked,
     };
     callbacks.onFilterChange(state);
   }

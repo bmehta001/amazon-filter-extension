@@ -21,6 +21,7 @@ export interface ScoreBreakdown {
   histogramDeduction: number;
   textDeduction: number;
   temporalDeduction: number;
+  mlDeduction?: number;
   reasons: string[];
 }
 

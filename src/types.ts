@@ -26,6 +26,7 @@ export interface FilterState {
   hideSponsored: boolean;
   queryBuilder: boolean;
   minReviewQuality: number;
+  useMLAnalysis: boolean;
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -49,6 +50,7 @@ export const DEFAULT_FILTERS: FilterState = {
   hideSponsored: false,
   queryBuilder: false,
   minReviewQuality: 0,
+  useMLAnalysis: false,
 };
 
 /** Default storage data. */
