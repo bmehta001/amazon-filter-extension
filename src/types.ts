@@ -8,6 +8,8 @@ export interface Product {
   brand: string;
   isSponsored: boolean;
   asin: string | null;
+  /** Review quality score (0-100), set asynchronously after fetch. */
+  reviewQuality?: number;
 }
 
 /** Brand filtering mode. */
@@ -23,6 +25,7 @@ export interface FilterState {
   brandMode: BrandMode;
   hideSponsored: boolean;
   queryBuilder: boolean;
+  minReviewQuality: number;
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -45,6 +48,7 @@ export const DEFAULT_FILTERS: FilterState = {
   brandMode: "off",
   hideSponsored: false,
   queryBuilder: false,
+  minReviewQuality: 0,
 };
 
 /** Default storage data. */

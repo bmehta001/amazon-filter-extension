@@ -151,6 +151,36 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
+  // Review Quality (0-100)
+  const qualityGroup = group("Review Quality:");
+  const qualitySlider = input("range", {
+    min: "0",
+    max: "100",
+    step: "5",
+    value: String(initialState.minReviewQuality),
+  });
+  const qualityInput = input("number", {
+    min: "0",
+    max: "100",
+    value: String(initialState.minReviewQuality),
+    placeholder: "0",
+  });
+  qualityInput.style.width = "45px";
+  qualitySlider.addEventListener("input", () => {
+    qualityInput.value = qualitySlider.value;
+    emitChange();
+  });
+  qualityInput.addEventListener("change", () => {
+    qualitySlider.value = qualityInput.value;
+    emitChange();
+  });
+  qualityGroup.append(qualitySlider, qualityInput);
+  qualityGroup.title =
+    "Minimum review authenticity score (0 = off, 100 = only show products with fully authentic reviews)";
+  bar.appendChild(qualityGroup);
+
+  bar.appendChild(sep());
+
   // Query Builder toggle
   const qbGroup = group("Query Builder:");
   const qbCb = document.createElement("input");
@@ -205,6 +235,7 @@ export function createFilterBar(
       brandMode: brandSelect.value as BrandMode,
       hideSponsored: sponsoredCb.checked,
       queryBuilder: qbCb.checked,
+      minReviewQuality: parseInt(qualityInput.value, 10) || 0,
     };
     callbacks.onFilterChange(state);
   }

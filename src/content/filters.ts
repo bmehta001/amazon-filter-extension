@@ -41,7 +41,19 @@ export async function applyFilters(
   }
 
   // P5: Brand mode
-  return await applyBrandFilter(product, state.brandMode);
+  const brandResult = await applyBrandFilter(product, state.brandMode);
+  if (brandResult !== "show") return brandResult;
+
+  // P6: Review quality (only if score has been computed and threshold is set)
+  if (
+    state.minReviewQuality > 0 &&
+    product.reviewQuality !== undefined &&
+    product.reviewQuality < state.minReviewQuality
+  ) {
+    return "hide";
+  }
+
+  return "show";
 }
 
 /**

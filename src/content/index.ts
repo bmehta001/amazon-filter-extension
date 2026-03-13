@@ -5,8 +5,13 @@ import { extractAllProducts, extractProduct, getProductCards } from "./extractor
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats } from "./ui/filterBar";
 import { injectCardActions } from "./ui/cardActions";
+import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
+import { createRateLimitedFetcher } from "../review/fetcher";
+import { computeReviewScore } from "../review/analyzer";
+import { getCachedScore, setCachedScore } from "../review/cache";
 import type { FilterState, Product } from "../types";
+import type { ReviewScore } from "../review/types";
 
 // CSS classes for product card visual states
 const GLOBAL_STYLES = `
@@ -14,10 +19,28 @@ const GLOBAL_STYLES = `
   .bas-dimmed { opacity: 0.4; transition: opacity 0.2s; }
   .bas-dimmed:hover { opacity: 0.8; }
   .bas-trusted { border-left: 3px solid #067d62 !important; }
+${REVIEW_BADGE_STYLES}
+`;
+
+// CSS to hide the top sponsored carousel/slot
+const SPONSORED_TOPSLOT_STYLES = `
+  div.s-top-slot,
+  div[data-component-type="s-top-ads-feedback"],
+  div[cel_widget_id*="MAIN-TOP_BANNER"],
+  div[cel_widget_id*="TOP-BANNER"],
+  div[data-component-type="s-ads-metrics"],
+  div[data-cel-widget*="top_sponsored"],
+  div.AdHolder,
+  div[data-component-type="s-top-slot"] {
+    display: none !important;
+  }
 `;
 
 let currentFilters: FilterState;
 let filterBarHost: HTMLElement | null = null;
+const fetchReview = createRateLimitedFetcher(2, 500);
+/** Map ASIN → ReviewScore for products already scored this session. */
+const reviewScoreMap = new Map<string, ReviewScore>();
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -33,6 +56,9 @@ async function main(): Promise<void> {
   // Load saved filters and brand allowlist concurrently
   const [filters] = await Promise.all([loadFilters(), initAllowlist()]);
   currentFilters = filters;
+
+  // Apply sponsored top-slot hiding if enabled
+  updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
 
   // Inject the filter bar UI
   filterBarHost = createFilterBar(currentFilters, {
@@ -88,6 +114,11 @@ async function filterAllProducts(): Promise<void> {
   let shown = 0;
 
   for (const product of products) {
+    // Attach cached review quality if available
+    if (product.asin && reviewScoreMap.has(product.asin)) {
+      product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
+    }
+
     const result = await applyFilters(product, currentFilters);
     applyFilterResult(product.element, result);
 
@@ -107,6 +138,9 @@ async function filterAllProducts(): Promise<void> {
   if (filterBarHost) {
     updateStats(filterBarHost, shown, products.length);
   }
+
+  // Queue review analysis for products with ASINs (non-blocking)
+  queueReviewAnalysis(products);
 }
 
 /**
@@ -118,6 +152,7 @@ function handleFilterChange(newState: FilterState): void {
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
   updateObserverFilters(currentFilters);
+  updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
   filterAllProducts();
 }
 
@@ -181,6 +216,75 @@ function injectGlobalStyles(): void {
   style.id = "bas-global-styles";
   style.textContent = GLOBAL_STYLES;
   document.head.appendChild(style);
+}
+
+/**
+ * Toggle the sponsored top-slot/carousel visibility.
+ * Injects or removes a <style> element that hides the entire top sponsored row.
+ */
+function updateSponsoredTopSlotVisibility(hide: boolean): void {
+  const styleId = "bas-sponsored-topslot-styles";
+  const existing = document.getElementById(styleId);
+  if (hide && !existing) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = SPONSORED_TOPSLOT_STYLES;
+    document.head.appendChild(style);
+  } else if (!hide && existing) {
+    existing.remove();
+  }
+}
+
+/**
+ * Queue background review analysis for products that haven't been scored yet.
+ * Non-blocking — badges update asynchronously as results arrive.
+ */
+function queueReviewAnalysis(products: Product[]): void {
+  for (const product of products) {
+    if (!product.asin) continue;
+    const asin = product.asin;
+
+    // Skip if already scored this session
+    if (reviewScoreMap.has(asin)) {
+      const score = reviewScoreMap.get(asin)!;
+      injectReviewBadge(product.element, score);
+      continue;
+    }
+
+    // Show loading badge
+    injectReviewBadge(product.element, null);
+
+    // Check cache, then fetch if needed
+    void (async () => {
+      try {
+        // Try cache first
+        let score = await getCachedScore(asin);
+        if (!score) {
+          // Fetch and analyze
+          const reviewData = await fetchReview(asin);
+          // Only score if we got meaningful data
+          if (reviewData.histogram || reviewData.reviews.length > 0) {
+            score = computeReviewScore(reviewData);
+            await setCachedScore(asin, score).catch(() => {});
+          }
+        }
+
+        if (score) {
+          reviewScoreMap.set(asin, score);
+          // Update the badge
+          injectReviewBadge(product.element, score);
+          // Attach score to product and re-apply filter if quality threshold is set
+          if (currentFilters.minReviewQuality > 0) {
+            product.reviewQuality = score.score;
+            const result = await applyFilters(product, currentFilters);
+            applyFilterResult(product.element, result);
+          }
+        }
+      } catch (err) {
+        console.warn("[BAS] Review analysis error:", err);
+      }
+    })();
+  }
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────
