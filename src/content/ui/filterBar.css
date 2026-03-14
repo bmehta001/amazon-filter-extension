@@ -119,3 +119,58 @@
   color: #565959;
   margin-left: auto;
 }
+
+/* ── Responsive: tablet / narrow window ─────────────────────────────── */
+
+@media (max-width: 900px) {
+  .bas-filter-bar {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .bas-separator {
+    display: none;
+  }
+
+  .bas-filter-group textarea {
+    width: 120px;
+  }
+
+  .bas-filter-group input[type="range"] {
+    width: 60px;
+  }
+}
+
+/* ── Responsive: phone / very narrow ────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .bas-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .bas-separator {
+    display: none;
+  }
+
+  .bas-filter-group {
+    flex-wrap: wrap;
+  }
+
+  .bas-filter-group input[type="range"] {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .bas-filter-group textarea {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bas-stats {
+    margin-left: 0;
+    text-align: right;
+  }
+}

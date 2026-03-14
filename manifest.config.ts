@@ -1,5 +1,6 @@
 import { defineManifest } from "@crxjs/vite-plugin";
 
+// @ts-expect-error — browser_specific_settings is a Firefox-only field not in CRXJS types
 export default defineManifest({
   manifest_version: 3,
   name: "Better Amazon Search",
@@ -54,4 +55,11 @@ export default defineManifest({
     },
     default_title: "Better Amazon Search",
   },
-});
+  // Firefox (Gecko) support — requires Firefox 121+ for MV3 service workers
+  browser_specific_settings: {
+    gecko: {
+      id: "better-amazon-search@bmehta001",
+      strict_min_version: "121.0",
+    },
+  },
+} as Record<string, unknown>);  // eslint-disable-line
