@@ -31,7 +31,7 @@ export interface FilterState {
   useMLAnalysis: boolean;
   ignoredCategories: string[];
   dedupCategories: string[];
-  targetResultCount: number;  // desired number of items to display (50 = 1 page, up to 500)
+  totalPages: number;  // how many pages of results to show (1 = current page only, up to 10)
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -58,7 +58,7 @@ export const DEFAULT_FILTERS: FilterState = {
   useMLAnalysis: false,
   ignoredCategories: [],
   dedupCategories: [],
-  targetResultCount: 50,
+  totalPages: 1,
 };
 
 /** Default storage data. */

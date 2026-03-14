@@ -3,7 +3,7 @@ import { isAmazonSearchPage, buildSortByReviewsUrl, buildAmazonOnlyUrl, getSearc
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
-import { createFilterBar, updateStats, updatePrefetchStatus } from "./ui/filterBar";
+import { createFilterBar, updateStats, updatePrefetchStatus, type FilterBarLayout } from "./ui/filterBar";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
@@ -69,32 +69,38 @@ async function main(): Promise<void> {
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
 
-  // Inject the filter bar UI
+  // Inject the filter bar UI — prefer sidebar, fall back to horizontal bar
+  const sidebarTarget = findSidebarTarget();
+  const layout: FilterBarLayout = sidebarTarget ? "sidebar" : "bar";
+
   filterBarHost = createFilterBar(currentFilters, {
     onFilterChange: handleFilterChange,
     onQueryBuilderApply: handleQueryBuilderApply,
     onSortByReviews: handleSortByReviews,
     onAmazonOnly: handleAmazonOnly,
-  });
+  }, layout);
 
-  const insertionPoint = findInsertionPoint();
-  if (insertionPoint) {
-    insertionPoint.before(filterBarHost);
+  if (sidebarTarget) {
+    sidebarTarget.prepend(filterBarHost);
   } else {
-    // Fallback: prepend to main content
-    const main =
-      document.querySelector("#search") ||
-      document.querySelector('[data-component-type="s-search-results"]');
-    if (main) {
-      main.prepend(filterBarHost);
+    const insertionPoint = findInsertionPoint();
+    if (insertionPoint) {
+      insertionPoint.before(filterBarHost);
+    } else {
+      const main =
+        document.querySelector("#search") ||
+        document.querySelector('[data-component-type="s-search-results"]');
+      if (main) {
+        main.prepend(filterBarHost);
+      }
     }
   }
 
   // Initial filtering pass
   await filterAllProducts();
 
-  // Start background pagination if target exceeds one page
-  if (currentFilters.targetResultCount > 50) {
+  // Start background pagination if viewing multiple pages
+  if (currentFilters.totalPages > 1) {
     startBackgroundPagination();
   }
 
@@ -201,7 +207,9 @@ async function filterAllProducts(): Promise<void> {
  * Start fetching additional search result pages in the background.
  */
 function startBackgroundPagination(): void {
-  if (currentFilters.targetResultCount <= 50) return;
+  if (currentFilters.totalPages <= 1) return;
+
+  const pagesToFetch = currentFilters.totalPages - 1;
 
   void startPagination(
     (status) => {
@@ -212,9 +220,8 @@ function startBackgroundPagination(): void {
           updatePrefetchStatus(filterBarHost, `Loading… ${status.totalProducts} items`);
         }
       }
-      // The MutationObserver will automatically pick up and filter new cards
     },
-    currentFilters.targetResultCount,
+    pagesToFetch,
   );
 }
 
@@ -225,7 +232,7 @@ function startBackgroundPagination(): void {
 function handleFilterChange(newState: FilterState): void {
   const categoriesChanged =
     JSON.stringify(currentFilters.ignoredCategories) !== JSON.stringify(newState.ignoredCategories);
-  const prefetchChanged = currentFilters.targetResultCount !== newState.targetResultCount;
+  const prefetchChanged = currentFilters.totalPages !== newState.totalPages;
   currentFilters = newState;
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
@@ -251,7 +258,7 @@ function handleFilterChange(newState: FilterState): void {
   if (prefetchChanged) {
     stopPagination();
     removePaginatedCards();
-    if (newState.targetResultCount > 50) {
+    if (newState.totalPages > 1) {
       startBackgroundPagination();
     } else {
       if (filterBarHost) {
@@ -301,7 +308,20 @@ function handleAmazonOnly(): void {
 }
 
 /**
- * Find the best insertion point for the filter bar.
+ * Try to find Amazon's left sidebar/refinements panel.
+ * Returns the container element if found, null otherwise.
+ */
+function findSidebarTarget(): Element | null {
+  return (
+    document.querySelector("#s-refinements") ||
+    document.querySelector('[data-component-type="s-refinements"]') ||
+    document.querySelector(".s-refinements") ||
+    null
+  );
+}
+
+/**
+ * Find the best insertion point for the filter bar (fallback when no sidebar).
  */
 function findInsertionPoint(): Element | null {
   // Try above the search results grid

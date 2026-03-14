@@ -3,7 +3,6 @@ import {
   isPaginationActive,
   stopPagination,
   removePaginatedCards,
-  calculatePagesToFetch,
   updateNextPageLink,
 } from "../src/content/paginator";
 
@@ -66,51 +65,6 @@ describe("paginator", () => {
     expect(() => removePaginatedCards()).not.toThrow();
 
     expect(document.querySelectorAll('[data-bas-paginated="true"]').length).toBe(0);
-  });
-});
-
-describe("calculatePagesToFetch", () => {
-  it("returns 0 when target <= current count", () => {
-    expect(calculatePagesToFetch(50, 50, 48)).toBe(0);
-    expect(calculatePagesToFetch(60, 50, 48)).toBe(0);
-  });
-
-  it("returns 0 when items per page is 0 or negative", () => {
-    expect(calculatePagesToFetch(50, 200, 0)).toBe(0);
-    expect(calculatePagesToFetch(50, 200, -10)).toBe(0);
-  });
-
-  it("calculates 1 extra page for small increase", () => {
-    // 50 items, want 100, ~48 per page → need 2 pages... ceil(50/48) = 2
-    // Wait: (100-50)/48 = 1.04 → ceil = 2
-    expect(calculatePagesToFetch(50, 100, 48)).toBe(2);
-    // With exactly 50 per page: (100-50)/50 = 1.0 → ceil = 1
-    expect(calculatePagesToFetch(50, 100, 50)).toBe(1);
-  });
-
-  it("calculates correctly for 200 target with 48 items/page", () => {
-    // (200-48)/48 = 3.17 → ceil = 4 pages
-    expect(calculatePagesToFetch(48, 200, 48)).toBe(4);
-  });
-
-  it("calculates correctly for 500 target with 50 items/page", () => {
-    // (500-50)/50 = 9 → 9 pages
-    expect(calculatePagesToFetch(50, 500, 50)).toBe(9);
-  });
-
-  it("handles edge case where current is 0", () => {
-    // (100-0)/50 = 2
-    expect(calculatePagesToFetch(0, 100, 50)).toBe(2);
-  });
-
-  it("rounds up correctly when division is not even", () => {
-    // (150-50)/48 = 2.08 → ceil = 3
-    expect(calculatePagesToFetch(50, 150, 48)).toBe(3);
-  });
-
-  it("returns 1 when only slightly more items needed", () => {
-    // (51-50)/50 = 0.02 → ceil = 1
-    expect(calculatePagesToFetch(50, 51, 50)).toBe(1);
   });
 });
 

@@ -4,6 +4,8 @@ import filterBarStyles from "./filterBar.css?inline";
 import { REVIEW_CATEGORIES } from "../../review/categories";
 import { DEDUP_CATEGORIES } from "../dedup";
 
+export type FilterBarLayout = "bar" | "sidebar";
+
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
@@ -12,26 +14,30 @@ export interface FilterBarCallbacks {
 }
 
 /**
- * Create and inject the filter bar into the Amazon search results page.
+ * Create the filter panel.
  * Uses Shadow DOM for style isolation.
+ *
+ * @param layout — "bar" renders horizontally above results;
+ *                 "sidebar" renders vertically inside Amazon's left nav.
  */
 export function createFilterBar(
   initialState: FilterState,
   callbacks: FilterBarCallbacks,
+  layout: FilterBarLayout = "bar",
 ): HTMLElement {
   const host = document.createElement("div");
   host.id = "bas-filter-bar-host";
 
   const shadow = host.attachShadow({ mode: "open" });
 
-  // Inject styles
   const style = document.createElement("style");
   style.textContent = filterBarStyles;
   shadow.appendChild(style);
 
-  // Build the bar
   const bar = document.createElement("div");
-  bar.className = "bas-filter-bar";
+  bar.className = layout === "sidebar"
+    ? "bas-filter-bar bas-filter-bar--sidebar"
+    : "bas-filter-bar";
 
   // Title
   const title = document.createElement("span");
@@ -39,10 +45,11 @@ export function createFilterBar(
   title.textContent = "🔍 Better Filters";
   bar.appendChild(title);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Min Reviews
+  // ── Min Reviews ────────────────────────────────────────────────────
   const reviewGroup = group("Min Reviews:");
+  reviewGroup.title = "Hide products with fewer reviews than this threshold";
   const reviewSlider = input("range", {
     min: "0",
     max: "50000",
@@ -66,10 +73,11 @@ export function createFilterBar(
   reviewGroup.append(reviewSlider, reviewInput);
   bar.appendChild(reviewGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Min Rating
+  // ── Min Rating ─────────────────────────────────────────────────────
   const ratingGroup = group("Min Rating:");
+  ratingGroup.title = "Hide products rated below this value (uses adjusted rating when categories are ignored)";
   const ratingInput = input("number", {
     min: "0",
     max: "5",
@@ -82,10 +90,11 @@ export function createFilterBar(
   ratingGroup.appendChild(ratingInput);
   bar.appendChild(ratingGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Price Range
+  // ── Price Range ────────────────────────────────────────────────────
   const priceGroup = group("Price:");
+  priceGroup.title = "Filter by price range in the local currency";
   const priceMin = input("number", {
     min: "0",
     step: "1",
@@ -107,10 +116,11 @@ export function createFilterBar(
   priceGroup.append(priceMin, priceDash, priceMax);
   bar.appendChild(priceGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Exclude Keywords
+  // ── Exclude Keywords ───────────────────────────────────────────────
   const excludeGroup = group("Exclude:");
+  excludeGroup.title = "Hide products whose titles contain any of these words (comma-separated)";
   const excludeTextarea = document.createElement("textarea");
   excludeTextarea.placeholder = "word1, word2, ...";
   excludeTextarea.value = initialState.excludeTokens.join(", ");
@@ -118,10 +128,11 @@ export function createFilterBar(
   excludeGroup.appendChild(excludeTextarea);
   bar.appendChild(excludeGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Brand Mode
+  // ── Brand Mode ─────────────────────────────────────────────────────
   const brandGroup = group("Brands:");
+  brandGroup.title = "Filter by brand trust: dim unknown brands, hide suspicious ones, or show only trusted brands from a curated 3,000+ allowlist";
   const brandSelect = document.createElement("select");
   const brandOptions: [BrandMode, string][] = [
     ["off", "Off"],
@@ -140,10 +151,11 @@ export function createFilterBar(
   brandGroup.appendChild(brandSelect);
   bar.appendChild(brandGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Hide Sponsored
+  // ── Hide Sponsored ─────────────────────────────────────────────────
   const sponsoredGroup = group("Hide Sponsored:");
+  sponsoredGroup.title = "Hide all sponsored/ad products including the top carousel";
   const sponsoredCb = document.createElement("input");
   sponsoredCb.type = "checkbox";
   sponsoredCb.checked = initialState.hideSponsored;
@@ -151,10 +163,12 @@ export function createFilterBar(
   sponsoredGroup.appendChild(sponsoredCb);
   bar.appendChild(sponsoredGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Review Quality (0-100)
+  // ── Review Quality ─────────────────────────────────────────────────
   const qualityGroup = group("Review Quality:");
+  qualityGroup.title =
+    "Minimum review authenticity score (0 = off, 100 = only show products with fully authentic reviews). Analyzes rating histograms, text patterns, and temporal anomalies.";
   const qualitySlider = input("range", {
     min: "0",
     max: "100",
@@ -177,27 +191,27 @@ export function createFilterBar(
     emitChange();
   });
   qualityGroup.append(qualitySlider, qualityInput);
-  qualityGroup.title =
-    "Minimum review authenticity score (0 = off, 100 = only show products with fully authentic reviews)";
   bar.appendChild(qualityGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // AI Analysis
+  // ── AI Analysis ────────────────────────────────────────────────────
   const mlGroup = group("🤖 AI Analysis:");
+  mlGroup.title =
+    "Use ML sentiment analysis (distilBERT) to detect rating/text mismatches. Downloads a small AI model (~27 MB) on first use.";
   const mlCb = document.createElement("input");
   mlCb.type = "checkbox";
   mlCb.checked = initialState.useMLAnalysis ?? false;
   mlCb.addEventListener("change", emitChange);
   mlGroup.appendChild(mlCb);
-  mlGroup.title =
-    "Use ML sentiment analysis to detect rating/text mismatches (loads a small AI model)";
   bar.appendChild(mlGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Ignore Categories
+  // ── Ignore Categories ──────────────────────────────────────────────
   const catGroup = group("Ignore Categories:");
+  catGroup.title =
+    "Exclude reviews about non-product issues (e.g. shipping, packaging) from the rating calculation";
   const categoryCheckboxes = new Map<string, HTMLInputElement>();
 
   const catToggle = document.createElement("button");
@@ -250,7 +264,6 @@ export function createFilterBar(
     catToggle.textContent = `${collapsed ? "▾" : "▸"} Categories (${count} ignored)`;
   });
 
-  // Set initial toggle text
   const initialIgnored = Array.from(categoryCheckboxes.values()).filter(
     (c) => c.checked,
   ).length;
@@ -261,10 +274,12 @@ export function createFilterBar(
   catGroup.append(catToggle, catContainer);
   bar.appendChild(catGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Dedup Variants
+  // ── Dedup Variants ─────────────────────────────────────────────────
   const dedupGroup = group("Dedup Variants:");
+  dedupGroup.title =
+    "Hide duplicate product variants (e.g. same item in different colors). Keeps the variant with the most reviews.";
   const dedupCheckboxes = new Map<string, HTMLInputElement>();
 
   const dedupToggle = document.createElement("button");
@@ -314,7 +329,6 @@ export function createFilterBar(
     dedupToggle.textContent = `${collapsed ? "▾" : "▸"} Variants (${count} active)`;
   });
 
-  // Set initial toggle text
   const initialDedup = Array.from(dedupCheckboxes.values()).filter(
     (c) => c.checked,
   ).length;
@@ -325,34 +339,36 @@ export function createFilterBar(
   dedupGroup.append(dedupToggle, dedupContainer);
   bar.appendChild(dedupGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Results count selector
-  const resultsGroup = group("Results:");
-  const resultsSelect = document.createElement("select");
-  for (let n = 50; n <= 500; n += 50) {
+  // ── Pages selector ─────────────────────────────────────────────────
+  const pagesGroup = group("Pages:");
+  pagesGroup.title =
+    "How many pages of results to view at once. Additional pages are fetched in the background and merged into the current view.";
+  const pagesSelect = document.createElement("select");
+  for (let n = 1; n <= 10; n++) {
     const opt = document.createElement("option");
     opt.value = String(n);
-    opt.textContent = `${n}`;
-    if (n === initialState.targetResultCount) opt.selected = true;
-    resultsSelect.appendChild(opt);
+    opt.textContent = n === 1 ? "1 page" : `${n} pages`;
+    if (n === initialState.totalPages) opt.selected = true;
+    pagesSelect.appendChild(opt);
   }
-  resultsSelect.addEventListener("change", emitChange);
-  resultsGroup.appendChild(resultsSelect);
+  pagesSelect.addEventListener("change", emitChange);
+  pagesGroup.appendChild(pagesSelect);
 
   const prefetchStatus = document.createElement("span");
   prefetchStatus.id = "bas-prefetch-status";
   prefetchStatus.style.fontSize = "11px";
   prefetchStatus.style.marginLeft = "6px";
-  resultsGroup.appendChild(prefetchStatus);
-  resultsGroup.title =
-    "How many search results to load. Amazon shows ~50 per page; higher values prefetch additional pages in the background.";
-  bar.appendChild(resultsGroup);
+  pagesGroup.appendChild(prefetchStatus);
+  bar.appendChild(pagesGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Query Builder toggle
+  // ── Query Builder ──────────────────────────────────────────────────
   const qbGroup = group("Query Builder:");
+  qbGroup.title =
+    "When enabled, the Exclude keywords are applied as -term modifiers in the Amazon search box";
   const qbCb = document.createElement("input");
   qbCb.type = "checkbox";
   qbCb.checked = initialState.queryBuilder;
@@ -369,19 +385,21 @@ export function createFilterBar(
   qbGroup.appendChild(qbApply);
   bar.appendChild(qbGroup);
 
-  bar.appendChild(sep());
+  if (layout === "bar") bar.appendChild(sep());
 
-  // Sort & Seller helpers
+  // ── Sort & Seller helpers ──────────────────────────────────────────
   const helpersGroup = group("");
   const sortBtn = document.createElement("button");
   sortBtn.className = "bas-btn";
   sortBtn.textContent = "Sort by Reviews";
+  sortBtn.title = "Re-sort search results by number of reviews (navigates to a new URL)";
   sortBtn.addEventListener("click", () => callbacks.onSortByReviews());
   helpersGroup.appendChild(sortBtn);
 
   const sellerBtn = document.createElement("button");
   sellerBtn.className = "bas-btn";
   sellerBtn.textContent = "Amazon Only";
+  sellerBtn.title = "Show only products sold and shipped by Amazon";
   sellerBtn.addEventListener("click", () => callbacks.onAmazonOnly());
   helpersGroup.appendChild(sellerBtn);
   bar.appendChild(helpersGroup);
@@ -413,7 +431,7 @@ export function createFilterBar(
       dedupCategories: Array.from(dedupCheckboxes.entries())
         .filter(([_, cb]) => cb.checked)
         .map(([id, _]) => id),
-      targetResultCount: parseInt(resultsSelect.value, 10) || 50,
+      totalPages: Math.min(10, Math.max(1, parseInt(pagesSelect.value, 10) || 1)),
     };
     callbacks.onFilterChange(state);
   }

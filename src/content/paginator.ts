@@ -4,8 +4,6 @@ const TAG = "[BAS]";
 const MAX_PAGES = 20;
 const FETCH_DELAY_MS = 800;
 const PRODUCT_CARD_SELECTOR = 'div[data-component-type="s-search-result"]';
-/** Floor for items-per-page estimate when the current page has very few cards. */
-const MIN_ITEMS_PER_PAGE = 16;
 
 /** Status callback for progress updates. */
 export type PaginationStatus = {
@@ -24,21 +22,6 @@ export function getCurrentPage(): number {
   const url = new URL(window.location.href);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   return isNaN(page) || page < 1 ? 1 : page;
-}
-
-/**
- * Calculate how many additional pages to fetch so that the total item
- * count reaches (or slightly exceeds) the target.
- *
- * Returns 0 when no fetching is needed.
- */
-export function calculatePagesToFetch(
-  currentItemCount: number,
-  targetItemCount: number,
-  estimatedItemsPerPage: number,
-): number {
-  if (targetItemCount <= currentItemCount || estimatedItemsPerPage <= 0) return 0;
-  return Math.ceil((targetItemCount - currentItemCount) / estimatedItemsPerPage);
 }
 
 // ── DOM helpers ─────────────────────────────────────────────────────
@@ -118,19 +101,14 @@ export function updateNextPageLink(lastPage: number): void {
 }
 
 /**
- * Start background pagination to reach the desired result count.
- *
- * Calculates how many extra pages are needed based on the current item
- * count and items-per-page estimate, then fetches them sequentially.
- * Changing the target resets state (caller should call removePaginatedCards
- * first and then start a fresh pagination).
+ * Start background pagination: fetch additional pages and inject cards.
  *
  * @param onStatus — progress callback
- * @param targetResultCount — desired total number of items on the page
+ * @param pagesToFetch — number of extra pages to fetch beyond the current page
  */
 export async function startPagination(
   onStatus: (status: PaginationStatus) => void,
-  targetResultCount: number,
+  pagesToFetch: number,
 ): Promise<void> {
   if (paginationActive) return;
   paginationActive = true;
@@ -149,34 +127,26 @@ export async function startPagination(
     if (asin) seenAsins.add(asin);
   }
 
-  const currentPage = getCurrentPage();
-  const currentCount = existingCards.length;
-  const itemsPerPage = Math.max(currentCount, MIN_ITEMS_PER_PAGE);
-  const pagesToFetch = calculatePagesToFetch(currentCount, targetResultCount, itemsPerPage);
-
   if (pagesToFetch <= 0) {
-    console.log(TAG, `Already have ${currentCount} items (target: ${targetResultCount})`);
     paginationActive = false;
-    onStatus({ currentPage, totalPages: currentPage, totalProducts: currentCount, done: true });
+    onStatus({ currentPage: getCurrentPage(), totalPages: getCurrentPage(), totalProducts: existingCards.length, done: true });
     return;
   }
 
+  const currentPage = getCurrentPage();
   const startPage = currentPage + 1;
   const endPage = Math.min(startPage + pagesToFetch - 1, detectMaxPages());
 
   if (startPage > endPage) {
     console.log(TAG, "No more pages available to fetch");
     paginationActive = false;
-    onStatus({ currentPage, totalPages: currentPage, totalProducts: currentCount, done: true });
+    onStatus({ currentPage, totalPages: currentPage, totalProducts: existingCards.length, done: true });
     return;
   }
 
-  let totalProducts = currentCount;
+  let totalProducts = existingCards.length;
 
-  console.log(
-    TAG,
-    `Prefetching pages ${startPage}–${endPage} to reach ~${targetResultCount} items (currently ${currentCount})`,
-  );
+  console.log(TAG, `Prefetching pages ${startPage}–${endPage} (${endPage - startPage + 1} pages)`);
 
   for (let page = startPage; page <= endPage; page++) {
     if (!paginationActive) break;
