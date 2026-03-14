@@ -69,32 +69,8 @@ async function main(): Promise<void> {
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
 
-  // Inject the filter bar UI — prefer sidebar, fall back to horizontal bar
-  const sidebarTarget = findSidebarTarget();
-  const layout: FilterBarLayout = sidebarTarget ? "sidebar" : "bar";
-
-  filterBarHost = createFilterBar(currentFilters, {
-    onFilterChange: handleFilterChange,
-    onQueryBuilderApply: handleQueryBuilderApply,
-    onSortByReviews: handleSortByReviews,
-    onAmazonOnly: handleAmazonOnly,
-  }, layout);
-
-  if (sidebarTarget) {
-    sidebarTarget.prepend(filterBarHost);
-  } else {
-    const insertionPoint = findInsertionPoint();
-    if (insertionPoint) {
-      insertionPoint.before(filterBarHost);
-    } else {
-      const main =
-        document.querySelector("#search") ||
-        document.querySelector('[data-component-type="s-search-results"]');
-      if (main) {
-        main.prepend(filterBarHost);
-      }
-    }
-  }
+  // Inject the filter bar, retrying if DOM isn't ready yet
+  await injectFilterBar();
 
   // Initial filtering pass
   await filterAllProducts();
@@ -124,6 +100,109 @@ async function main(): Promise<void> {
   window.addEventListener("beforeunload", () => {
     syncFlushPendingFilterSave();
   });
+
+  // Watch for Amazon SPA-style soft navigation (URL changes without page reload)
+  watchForSoftNavigation();
+}
+
+/**
+ * Inject the filter bar into the page, with retry logic for dynamically
+ * loaded layouts where the sidebar/results container may not exist yet.
+ */
+async function injectFilterBar(): Promise<void> {
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 500;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Remove previous instance if re-injecting
+    if (filterBarHost?.parentElement) {
+      filterBarHost.remove();
+    }
+
+    const sidebarTarget = findSidebarTarget();
+    const layout: FilterBarLayout = sidebarTarget ? "sidebar" : "bar";
+
+    filterBarHost = createFilterBar(currentFilters, {
+      onFilterChange: handleFilterChange,
+      onQueryBuilderApply: handleQueryBuilderApply,
+      onSortByReviews: handleSortByReviews,
+      onAmazonOnly: handleAmazonOnly,
+    }, layout);
+
+    if (sidebarTarget) {
+      sidebarTarget.prepend(filterBarHost);
+      console.log("[BAS] Filter bar injected into sidebar");
+      return;
+    }
+
+    const insertionPoint = findInsertionPoint();
+    if (insertionPoint) {
+      insertionPoint.before(filterBarHost);
+      console.log("[BAS] Filter bar injected above results");
+      return;
+    }
+
+    const fallback =
+      document.querySelector("#search") ||
+      document.querySelector('[data-component-type="s-search-results"]');
+    if (fallback) {
+      fallback.prepend(filterBarHost);
+      console.log("[BAS] Filter bar injected into #search fallback");
+      return;
+    }
+
+    // Last resort: prepend to body
+    if (attempt === MAX_RETRIES) {
+      document.body.prepend(filterBarHost);
+      console.warn("[BAS] Filter bar injected into body (all selectors failed)");
+      return;
+    }
+
+    // Wait and retry — DOM may not be ready yet
+    console.log(`[BAS] Insertion point not found, retrying (${attempt + 1}/${MAX_RETRIES})...`);
+    await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+  }
+}
+
+/** Track the last URL to detect soft navigations. */
+let lastUrl = location.href;
+
+/**
+ * Watch for Amazon's SPA-style navigation where the URL changes without
+ * a full page reload (e.g. pagination, filter clicks). When detected,
+ * re-inject the filter bar and re-apply filters.
+ */
+function watchForSoftNavigation(): void {
+  // Poll for URL changes (popstate doesn't fire for pushState)
+  const CHECK_INTERVAL_MS = 1000;
+
+  setInterval(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      console.log("[BAS] Soft navigation detected:", lastUrl);
+
+      if (!isAmazonSearchPage()) return;
+
+      // Re-inject filter bar if it was removed from DOM
+      if (!filterBarHost?.parentElement) {
+        void injectFilterBar().then(() => filterAllProducts());
+      } else {
+        void filterAllProducts();
+      }
+    }
+  }, CHECK_INTERVAL_MS);
+
+  // Also watch for DOM replacement of the results container
+  const searchContainer = document.querySelector("#search");
+  if (searchContainer) {
+    const navObserver = new MutationObserver(() => {
+      if (filterBarHost && !filterBarHost.parentElement) {
+        console.log("[BAS] Filter bar removed from DOM, re-injecting");
+        void injectFilterBar().then(() => filterAllProducts());
+      }
+    });
+    navObserver.observe(searchContainer, { childList: true, subtree: false });
+  }
 }
 
 /**
