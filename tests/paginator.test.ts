@@ -3,7 +3,7 @@ import {
   isPaginationActive,
   stopPagination,
   removePaginatedCards,
-  calculatePrefetchRange,
+  calculatePagesToFetch,
   updateNextPageLink,
 } from "../src/content/paginator";
 
@@ -64,101 +64,53 @@ describe("paginator", () => {
 
     removePaginatedCards();
     expect(() => removePaginatedCards()).not.toThrow();
-    expect(() => removePaginatedCards()).not.toThrow();
 
     expect(document.querySelectorAll('[data-bas-paginated="true"]').length).toBe(0);
   });
 });
 
-describe("calculatePrefetchRange", () => {
-  it("on page 1 with no prior prefetch, fetches pages 2–6 for 5 pages", () => {
-    const result = calculatePrefetchRange(1, 0, 5, 20);
-    expect(result).toEqual({ startPage: 2, endPage: 6 });
+describe("calculatePagesToFetch", () => {
+  it("returns 0 when target <= current count", () => {
+    expect(calculatePagesToFetch(50, 50, 48)).toBe(0);
+    expect(calculatePagesToFetch(60, 50, 48)).toBe(0);
   });
 
-  it("on page 3 with no prior prefetch, fetches pages 4–8 for 5 pages", () => {
-    const result = calculatePrefetchRange(3, 0, 5, 20);
-    expect(result).toEqual({ startPage: 4, endPage: 8 });
+  it("returns 0 when items per page is 0 or negative", () => {
+    expect(calculatePagesToFetch(50, 200, 0)).toBe(0);
+    expect(calculatePagesToFetch(50, 200, -10)).toBe(0);
   });
 
-  it("on page 1 after prefetching through 6, skips ahead to page 7", () => {
-    // User changed prefetch from 5 to 8 on page 1 after already reaching page 6
-    const result = calculatePrefetchRange(1, 6, 8, 20);
-    // Already fetched 5 beyond current (pages 2-6), need 3 more (7,8,9)
-    expect(result).toEqual({ startPage: 7, endPage: 9 });
+  it("calculates 1 extra page for small increase", () => {
+    // 50 items, want 100, ~48 per page → need 2 pages... ceil(50/48) = 2
+    // Wait: (100-50)/48 = 1.04 → ceil = 2
+    expect(calculatePagesToFetch(50, 100, 48)).toBe(2);
+    // With exactly 50 per page: (100-50)/50 = 1.0 → ceil = 1
+    expect(calculatePagesToFetch(50, 100, 50)).toBe(1);
   });
 
-  it("on page 2 after prefetching through 6 from page 1, starts at page 7", () => {
-    const result = calculatePrefetchRange(2, 6, 5, 20);
-    // Already fetched 4 beyond current (pages 3-6), need 1 more (page 7)
-    expect(result).toEqual({ startPage: 7, endPage: 7 });
+  it("calculates correctly for 200 target with 48 items/page", () => {
+    // (200-48)/48 = 3.17 → ceil = 4 pages
+    expect(calculatePagesToFetch(48, 200, 48)).toBe(4);
   });
 
-  it("returns null when all requested pages already prefetched", () => {
-    // On page 1, already prefetched through 6, only asking for 5
-    const result = calculatePrefetchRange(1, 6, 5, 20);
-    expect(result).toBeNull();
+  it("calculates correctly for 500 target with 50 items/page", () => {
+    // (500-50)/50 = 9 → 9 pages
+    expect(calculatePagesToFetch(50, 500, 50)).toBe(9);
   });
 
-  it("returns null when already prefetched more than requested", () => {
-    const result = calculatePrefetchRange(1, 10, 5, 20);
-    expect(result).toBeNull();
+  it("handles edge case where current is 0", () => {
+    // (100-0)/50 = 2
+    expect(calculatePagesToFetch(0, 100, 50)).toBe(2);
   });
 
-  it("caps endPage at maxAvailablePages", () => {
-    const result = calculatePrefetchRange(1, 0, 10, 7);
-    expect(result).toEqual({ startPage: 2, endPage: 7 });
+  it("rounds up correctly when division is not even", () => {
+    // (150-50)/48 = 2.08 → ceil = 3
+    expect(calculatePagesToFetch(50, 150, 48)).toBe(3);
   });
 
-  it("returns null when startPage exceeds maxAvailablePages", () => {
-    const result = calculatePrefetchRange(1, 0, 5, 1);
-    expect(result).toBeNull();
-  });
-
-  it("on page 8 past prior prefetch range of 6, starts from 9", () => {
-    // User manually navigated past the prefetched range
-    const result = calculatePrefetchRange(8, 6, 5, 20);
-    expect(result).toEqual({ startPage: 9, endPage: 13 });
-  });
-
-  it("handles pagesToFetch of 1", () => {
-    const result = calculatePrefetchRange(1, 0, 1, 20);
-    expect(result).toEqual({ startPage: 2, endPage: 2 });
-  });
-
-  it("handles pagesToFetch of 0", () => {
-    const result = calculatePrefetchRange(1, 0, 0, 20);
-    expect(result).toBeNull();
-  });
-
-  it("consecutive prefetch increments work correctly", () => {
-    // First: on page 1, prefetch 3 → pages 2-4
-    const first = calculatePrefetchRange(1, 0, 3, 20);
-    expect(first).toEqual({ startPage: 2, endPage: 4 });
-
-    // Then user increases to 5 while still on page 1
-    // lastPrefetched is now 4, need 2 more
-    const second = calculatePrefetchRange(1, 4, 5, 20);
-    expect(second).toEqual({ startPage: 5, endPage: 6 });
-
-    // Then user increases to 8 while still on page 1
-    // lastPrefetched is now 6, need 2 more
-    const third = calculatePrefetchRange(1, 6, 8, 20);
-    expect(third).toEqual({ startPage: 7, endPage: 9 });
-  });
-
-  it("navigating forward accumulates correctly across pages", () => {
-    // Page 1, prefetch 5 → pages 2-6
-    const r1 = calculatePrefetchRange(1, 0, 5, 20);
-    expect(r1).toEqual({ startPage: 2, endPage: 6 });
-
-    // Navigate to page 2, prefetch 5 → pages 7-7 (only 1 new needed)
-    const r2 = calculatePrefetchRange(2, 6, 5, 20);
-    expect(r2).toEqual({ startPage: 7, endPage: 7 });
-
-    // Navigate to page 7, prefetch 5 → pages 8-12
-    const r3 = calculatePrefetchRange(7, 7, 5, 20);
-    expect(r3).toEqual({ startPage: 8, endPage: 12 });
+  it("returns 1 when only slightly more items needed", () => {
+    // (51-50)/50 = 0.02 → ceil = 1
+    expect(calculatePagesToFetch(50, 51, 50)).toBe(1);
   });
 });
 
@@ -185,7 +137,6 @@ describe("updateNextPageLink", () => {
     updateNextPageLink(6);
     const link = document.querySelector<HTMLAnchorElement>(".s-pagination-next")!;
     const url = new URL(link.href);
-    // Disabled links are excluded by the :not selector, so href should be unchanged
     expect(url.searchParams.get("page")).toBe("2");
   });
 });

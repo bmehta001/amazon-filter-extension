@@ -93,8 +93,8 @@ async function main(): Promise<void> {
   // Initial filtering pass
   await filterAllProducts();
 
-  // Start background pagination if enabled
-  if (currentFilters.prefetchPages > 0) {
+  // Start background pagination if target exceeds one page
+  if (currentFilters.targetResultCount > 50) {
     startBackgroundPagination();
   }
 
@@ -201,20 +201,20 @@ async function filterAllProducts(): Promise<void> {
  * Start fetching additional search result pages in the background.
  */
 function startBackgroundPagination(): void {
-  if (currentFilters.prefetchPages <= 0) return;
+  if (currentFilters.targetResultCount <= 50) return;
 
   void startPagination(
     (status) => {
       if (filterBarHost) {
         if (status.done) {
-          updatePrefetchStatus(filterBarHost, `✓ ${status.totalProducts} products`);
+          updatePrefetchStatus(filterBarHost, `✓ ${status.totalProducts} items`);
         } else {
-          updatePrefetchStatus(filterBarHost, `Loading p${status.currentPage}...`);
+          updatePrefetchStatus(filterBarHost, `Loading… ${status.totalProducts} items`);
         }
       }
       // The MutationObserver will automatically pick up and filter new cards
     },
-    currentFilters.prefetchPages,
+    currentFilters.targetResultCount,
   );
 }
 
@@ -225,7 +225,7 @@ function startBackgroundPagination(): void {
 function handleFilterChange(newState: FilterState): void {
   const categoriesChanged =
     JSON.stringify(currentFilters.ignoredCategories) !== JSON.stringify(newState.ignoredCategories);
-  const prefetchChanged = currentFilters.prefetchPages !== newState.prefetchPages;
+  const prefetchChanged = currentFilters.targetResultCount !== newState.targetResultCount;
   currentFilters = newState;
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
@@ -247,13 +247,13 @@ function handleFilterChange(newState: FilterState): void {
     }
   }
 
-  // Handle prefetch changes
+  // Handle result count changes — reset and re-prefetch
   if (prefetchChanged) {
-    if (currentFilters.prefetchPages > 0) {
+    stopPagination();
+    removePaginatedCards();
+    if (newState.targetResultCount > 50) {
       startBackgroundPagination();
     } else {
-      stopPagination();
-      removePaginatedCards();
       if (filterBarHost) {
         updatePrefetchStatus(filterBarHost, "");
       }

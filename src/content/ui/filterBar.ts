@@ -327,27 +327,27 @@ export function createFilterBar(
 
   bar.appendChild(sep());
 
-  // Prefetch Pages
-  const prefetchGroup = group("Prefetch:");
-  const prefetchInput = input("number", {
-    min: "0",
-    max: "10",
-    step: "1",
-    value: String(initialState.prefetchPages),
-    placeholder: "0",
-  });
-  prefetchInput.style.width = "45px";
-  prefetchInput.addEventListener("change", emitChange);
-  prefetchGroup.appendChild(prefetchInput);
+  // Results count selector
+  const resultsGroup = group("Results:");
+  const resultsSelect = document.createElement("select");
+  for (let n = 50; n <= 500; n += 50) {
+    const opt = document.createElement("option");
+    opt.value = String(n);
+    opt.textContent = `${n}`;
+    if (n === initialState.targetResultCount) opt.selected = true;
+    resultsSelect.appendChild(opt);
+  }
+  resultsSelect.addEventListener("change", emitChange);
+  resultsGroup.appendChild(resultsSelect);
 
   const prefetchStatus = document.createElement("span");
   prefetchStatus.id = "bas-prefetch-status";
   prefetchStatus.style.fontSize = "11px";
   prefetchStatus.style.marginLeft = "6px";
-  prefetchGroup.appendChild(prefetchStatus);
-  prefetchGroup.title =
-    "Fetch extra pages of search results in the background (0 = off, 1-10 = number of extra pages)";
-  bar.appendChild(prefetchGroup);
+  resultsGroup.appendChild(prefetchStatus);
+  resultsGroup.title =
+    "How many search results to load. Amazon shows ~50 per page; higher values prefetch additional pages in the background.";
+  bar.appendChild(resultsGroup);
 
   bar.appendChild(sep());
 
@@ -413,7 +413,7 @@ export function createFilterBar(
       dedupCategories: Array.from(dedupCheckboxes.entries())
         .filter(([_, cb]) => cb.checked)
         .map(([id, _]) => id),
-      prefetchPages: Math.min(10, Math.max(0, parseInt(prefetchInput.value, 10) || 0)),
+      targetResultCount: parseInt(resultsSelect.value, 10) || 50,
     };
     callbacks.onFilterChange(state);
   }
