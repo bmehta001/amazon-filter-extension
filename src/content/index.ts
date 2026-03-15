@@ -5,6 +5,7 @@ import { extractAllProducts, extractProduct, getProductCards } from "./extractor
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats, updatePrefetchStatus, type FilterBarLayout } from "./ui/filterBar";
+import { createDistributedFilters, updateDistributedStats, updateDistributedPrefetchStatus, cleanupDistributedFilters } from "./ui/sidebarWidgets";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
@@ -46,6 +47,8 @@ let currentFilters: FilterState;
 let filterBarHost: HTMLElement | null = null;
 /** Whether we're running on an Amazon Haul page vs. standard search. */
 let isHaulMode = false;
+/** Whether filter widgets are distributed across the sidebar (vs. monolithic bar). */
+let isDistributedMode = false;
 const fetchReview = createRateLimitedFetcher(2, 500);
 /** Map ASIN → ReviewScore for products already scored this session. */
 const reviewScoreMap = new Map<string, ReviewScore>();
@@ -112,33 +115,43 @@ async function main(): Promise<void> {
 /**
  * Inject the filter bar into the page, with retry logic for dynamically
  * loaded layouts where the sidebar/results container may not exist yet.
+ *
+ * When a sidebar is found, uses distributed mode: individual filter widgets
+ * are placed alongside Amazon's existing sidebar sections (Brand, Price,
+ * Customer Review) for a contextually integrated experience.
  */
 async function injectFilterBar(): Promise<void> {
   const MAX_RETRIES = 5;
   const RETRY_DELAY_MS = 500;
 
+  const filterCallbacks = {
+    onFilterChange: handleFilterChange,
+    onQueryBuilderApply: handleQueryBuilderApply,
+    onSortByReviews: handleSortByReviews,
+    onAmazonOnly: handleAmazonOnly,
+  };
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    // Remove previous instance if re-injecting
+    // Clean up previous instances
     if (filterBarHost?.parentElement) {
       filterBarHost.remove();
     }
+    cleanupDistributedFilters();
+    isDistributedMode = false;
 
     // On Haul pages, always use horizontal bar (no sidebar)
     const sidebarTarget = isHaulMode ? null : findSidebarTarget();
-    const layout: FilterBarLayout = sidebarTarget ? "sidebar" : "bar";
 
-    filterBarHost = createFilterBar(currentFilters, {
-      onFilterChange: handleFilterChange,
-      onQueryBuilderApply: handleQueryBuilderApply,
-      onSortByReviews: handleSortByReviews,
-      onAmazonOnly: handleAmazonOnly,
-    }, layout);
-
+    // ── Distributed mode: inject widgets alongside Amazon's sidebar sections ──
     if (sidebarTarget) {
-      sidebarTarget.prepend(filterBarHost);
-      console.log("[BAS] Filter bar injected into sidebar");
+      filterBarHost = createDistributedFilters(currentFilters, filterCallbacks, sidebarTarget);
+      isDistributedMode = true;
+      console.log("[BAS] Distributed filter widgets injected into sidebar");
       return;
     }
+
+    // ── Fallback: monolithic horizontal bar ──
+    filterBarHost = createFilterBar(currentFilters, filterCallbacks, "bar");
 
     const insertionPoint = isHaulMode ? findHaulInsertionPoint() : findInsertionPoint();
     if (insertionPoint) {
@@ -283,7 +296,11 @@ async function filterAllProducts(): Promise<void> {
 
   // Update stats
   if (filterBarHost) {
-    updateStats(filterBarHost, shown, products.length);
+    if (isDistributedMode) {
+      updateDistributedStats(filterBarHost, shown, products.length);
+    } else {
+      updateStats(filterBarHost, shown, products.length);
+    }
   }
 
   // Queue review analysis for products with ASINs (non-blocking)
@@ -301,10 +318,13 @@ function startBackgroundPagination(): void {
   void startPagination(
     (status) => {
       if (filterBarHost) {
-        if (status.done) {
-          updatePrefetchStatus(filterBarHost, `✓ ${status.totalProducts} items`);
+        const statusText = status.done
+          ? `✓ ${status.totalProducts} items`
+          : `Loading… ${status.totalProducts} items`;
+        if (isDistributedMode) {
+          updateDistributedPrefetchStatus(filterBarHost, statusText);
         } else {
-          updatePrefetchStatus(filterBarHost, `Loading… ${status.totalProducts} items`);
+          updatePrefetchStatus(filterBarHost, statusText);
         }
       }
     },
@@ -349,7 +369,11 @@ function handleFilterChange(newState: FilterState): void {
       startBackgroundPagination();
     } else {
       if (filterBarHost) {
-        updatePrefetchStatus(filterBarHost, "");
+        if (isDistributedMode) {
+          updateDistributedPrefetchStatus(filterBarHost, "");
+        } else {
+          updatePrefetchStatus(filterBarHost, "");
+        }
       }
     }
   }
