@@ -29,8 +29,9 @@ ${REVIEW_BADGE_STYLES}
 ${REVIEW_INSIGHTS_STYLES}
 `;
 
-// CSS to hide the top sponsored carousel/slot
-const SPONSORED_TOPSLOT_STYLES = `
+// CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
+const SPONSORED_STYLES = `
+  /* Top-slot sponsored banners */
   div.s-top-slot,
   div[data-component-type="s-top-ads-feedback"],
   div[cel_widget_id*="MAIN-TOP_BANNER"],
@@ -38,7 +39,24 @@ const SPONSORED_TOPSLOT_STYLES = `
   div[data-component-type="s-ads-metrics"],
   div[data-cel-widget*="top_sponsored"],
   div.AdHolder,
-  div[data-component-type="s-top-slot"] {
+  div[data-component-type="s-top-slot"],
+
+  /* Mid-page Sponsored Brands carousels (CSS-module hashed component) */
+  div[class*="_c2Itd_content_"],
+  div[data-component-type="s-searchgrid-carousel"],
+  div.a-carousel-container[class*="sb-"],
+  div[cel_widget_id*="MAIN-SHOPPING_ADVISER"],
+  div[cel_widget_id*="MAIN-VIDEO"],
+  div[cel_widget_id*="MAIN-FEATURED"],
+
+  /* Generic: any search-result-row containing ad-feedback elements */
+  .s-result-item:has(.adFeedbackMainComponent_b75d5b8a-b6c1-403d-82f3-b1a4c4ab0b23),
+  .s-result-item:has([class*="ad-feedback"]),
+  .s-result-item:has([class*="adFeedback"]),
+
+  /* Bottom / sidebar sponsored blocks */
+  div[data-component-type="s-bottom-slot"],
+  div[cel_widget_id*="BOTTOM"] {
     display: none !important;
   }
 `;
@@ -78,7 +96,7 @@ async function main(): Promise<void> {
   currentFilters = filters;
 
   // Apply sponsored top-slot hiding if enabled
-  updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
+  updateSponsoredVisibility(currentFilters.hideSponsored);
 
   // Inject the filter bar, retrying if DOM isn't ready yet
   await injectFilterBar();
@@ -364,7 +382,7 @@ function handleFilterChange(newState: FilterState): void {
   // Debounced save — coalesces rapid changes, flushes on beforeunload
   saveFilters(currentFilters);
   updateObserverFilters(currentFilters);
-  updateSponsoredTopSlotVisibility(currentFilters.hideSponsored);
+  updateSponsoredVisibility(currentFilters.hideSponsored);
 
   // Recompute insights if ignored categories changed
   if (categoriesChanged) {
@@ -519,13 +537,13 @@ function injectGlobalStyles(): void {
  * Toggle the sponsored top-slot/carousel visibility.
  * Injects or removes a <style> element that hides the entire top sponsored row.
  */
-function updateSponsoredTopSlotVisibility(hide: boolean): void {
-  const styleId = "bas-sponsored-topslot-styles";
+function updateSponsoredVisibility(hide: boolean): void {
+  const styleId = "bas-sponsored-styles";
   const existing = document.getElementById(styleId);
   if (hide && !existing) {
     const style = document.createElement("style");
     style.id = styleId;
-    style.textContent = SPONSORED_TOPSLOT_STYLES;
+    style.textContent = SPONSORED_STYLES;
     document.head.appendChild(style);
   } else if (!hide && existing) {
     existing.remove();
