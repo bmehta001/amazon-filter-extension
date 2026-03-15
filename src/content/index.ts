@@ -4,7 +4,7 @@ import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
-import { createFilterBar, updateStats, updatePrefetchStatus, type FilterBarLayout } from "./ui/filterBar";
+import { createFilterBar, updateStats, updatePrefetchStatus } from "./ui/filterBar";
 import { createDistributedFilters, updateDistributedStats, updateDistributedPrefetchStatus, cleanupDistributedFilters } from "./ui/sidebarWidgets";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
@@ -50,6 +50,10 @@ let isHaulMode = false;
 /** Whether filter widgets are distributed across the sidebar (vs. monolithic bar). */
 let isDistributedMode = false;
 const fetchReview = createRateLimitedFetcher(2, 500);
+/** Soft-navigation poll interval ID for cleanup. */
+let softNavIntervalId: ReturnType<typeof setInterval> | null = null;
+/** Soft-navigation DOM observer for cleanup. */
+let softNavObserver: MutationObserver | null = null;
 /** Map ASIN → ReviewScore for products already scored this session. */
 const reviewScoreMap = new Map<string, ReviewScore>();
 /** Map ASIN → ProductInsights for category breakdown. */
@@ -97,7 +101,7 @@ async function main(): Promise<void> {
     await filterAllProducts();
   });
 
-  // Flush pending saves before page unload to prevent data loss.
+  // Flush pending saves and clean up resources before page unload.
   // visibilitychange fires reliably on tab close/navigate; beforeunload is a fallback.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
@@ -106,6 +110,8 @@ async function main(): Promise<void> {
   });
   window.addEventListener("beforeunload", () => {
     syncFlushPendingFilterSave();
+    cleanupSoftNavigation();
+    stopObserving();
   });
 
   // Watch for Amazon SPA-style soft navigation (URL changes without page reload)
@@ -151,7 +157,7 @@ async function injectFilterBar(): Promise<void> {
     }
 
     // ── Fallback: monolithic horizontal bar ──
-    filterBarHost = createFilterBar(currentFilters, filterCallbacks, "bar");
+    filterBarHost = createFilterBar(currentFilters, filterCallbacks);
 
     const insertionPoint = isHaulMode ? findHaulInsertionPoint() : findInsertionPoint();
     if (insertionPoint) {
@@ -194,7 +200,7 @@ function watchForSoftNavigation(): void {
   // Poll for URL changes (popstate doesn't fire for pushState)
   const CHECK_INTERVAL_MS = 1000;
 
-  setInterval(() => {
+  softNavIntervalId = setInterval(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       console.log("[BAS] Soft navigation detected:", lastUrl);
@@ -216,13 +222,27 @@ function watchForSoftNavigation(): void {
   const searchContainer = document.querySelector("#search") ||
     (isHaulMode ? document.querySelector("main, [role='main']") : null);
   if (searchContainer) {
-    const navObserver = new MutationObserver(() => {
+    softNavObserver = new MutationObserver(() => {
       if (filterBarHost && !filterBarHost.parentElement) {
         console.log("[BAS] Filter bar removed from DOM, re-injecting");
         void injectFilterBar().then(() => filterAllProducts());
       }
     });
-    navObserver.observe(searchContainer, { childList: true, subtree: false });
+    softNavObserver.observe(searchContainer, { childList: true, subtree: false });
+  }
+}
+
+/**
+ * Clean up soft navigation watchers (interval + observer).
+ */
+function cleanupSoftNavigation(): void {
+  if (softNavIntervalId !== null) {
+    clearInterval(softNavIntervalId);
+    softNavIntervalId = null;
+  }
+  if (softNavObserver) {
+    softNavObserver.disconnect();
+    softNavObserver = null;
   }
 }
 
@@ -353,7 +373,7 @@ function handleFilterChange(newState: FilterState): void {
       productInsightsMap.set(asin, insights);
     }
     // Re-inject insights panels on all visible product cards
-    const products = extractAllProducts();
+    const products = isHaulMode ? extractAllHaulProducts() : extractAllProducts();
     for (const product of products) {
       if (product.asin && productInsightsMap.has(product.asin)) {
         injectReviewInsights(product.element, productInsightsMap.get(product.asin)!, currentFilters.ignoredCategories);

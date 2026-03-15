@@ -4,8 +4,6 @@ import filterBarStyles from "./filterBar.css?inline";
 import { REVIEW_CATEGORIES } from "../../review/categories";
 import { DEDUP_CATEGORIES } from "../dedup";
 
-export type FilterBarLayout = "bar" | "sidebar";
-
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
@@ -14,16 +12,16 @@ export interface FilterBarCallbacks {
 }
 
 /**
- * Create the filter panel.
+ * Create the filter panel as a horizontal bar above results.
  * Uses Shadow DOM for style isolation.
  *
- * @param layout — "bar" renders horizontally above results;
- *                 "sidebar" renders vertically inside Amazon's left nav.
+ * This is used as the fallback when no sidebar is available (Haul pages,
+ * narrow layouts). When a sidebar IS available, the distributed widget
+ * system in sidebarWidgets.ts is used instead.
  */
 export function createFilterBar(
   initialState: FilterState,
   callbacks: FilterBarCallbacks,
-  layout: FilterBarLayout = "bar",
 ): HTMLElement {
   const host = document.createElement("div");
   host.id = "bas-filter-bar-host";
@@ -35,9 +33,7 @@ export function createFilterBar(
   shadow.appendChild(style);
 
   const bar = document.createElement("div");
-  bar.className = layout === "sidebar"
-    ? "bas-filter-bar bas-filter-bar--sidebar"
-    : "bas-filter-bar";
+  bar.className = "bas-filter-bar";
 
   // Title
   const title = document.createElement("span");
@@ -45,7 +41,7 @@ export function createFilterBar(
   title.textContent = "🔍 Better Filters";
   bar.appendChild(title);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Min Reviews ────────────────────────────────────────────────────
   const reviewGroup = group("Min Reviews:");
@@ -73,7 +69,7 @@ export function createFilterBar(
   reviewGroup.append(reviewSlider, reviewInput);
   bar.appendChild(reviewGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Min Rating ─────────────────────────────────────────────────────
   const ratingGroup = group("Min Rating:");
@@ -90,7 +86,7 @@ export function createFilterBar(
   ratingGroup.appendChild(ratingInput);
   bar.appendChild(ratingGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Price Range ────────────────────────────────────────────────────
   const priceGroup = group("Price:");
@@ -116,7 +112,7 @@ export function createFilterBar(
   priceGroup.append(priceMin, priceDash, priceMax);
   bar.appendChild(priceGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Exclude Keywords ───────────────────────────────────────────────
   const excludeGroup = group("Exclude:");
@@ -128,7 +124,7 @@ export function createFilterBar(
   excludeGroup.appendChild(excludeTextarea);
   bar.appendChild(excludeGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Brand Mode ─────────────────────────────────────────────────────
   const brandGroup = group("Brands:");
@@ -151,7 +147,7 @@ export function createFilterBar(
   brandGroup.appendChild(brandSelect);
   bar.appendChild(brandGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Hide Sponsored ─────────────────────────────────────────────────
   const sponsoredGroup = group("Hide Sponsored:");
@@ -163,7 +159,7 @@ export function createFilterBar(
   sponsoredGroup.appendChild(sponsoredCb);
   bar.appendChild(sponsoredGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Review Quality ─────────────────────────────────────────────────
   const qualityGroup = group("Review Quality:");
@@ -193,7 +189,7 @@ export function createFilterBar(
   qualityGroup.append(qualitySlider, qualityInput);
   bar.appendChild(qualityGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── AI Analysis ────────────────────────────────────────────────────
   const mlGroup = group("🤖 AI Analysis:");
@@ -206,7 +202,7 @@ export function createFilterBar(
   mlGroup.appendChild(mlCb);
   bar.appendChild(mlGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Ignore Categories ──────────────────────────────────────────────
   const catGroup = group("Ignore Categories:");
@@ -274,7 +270,7 @@ export function createFilterBar(
   catGroup.append(catToggle, catContainer);
   bar.appendChild(catGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Dedup Variants ─────────────────────────────────────────────────
   const dedupGroup = group("Dedup Variants:");
@@ -339,7 +335,7 @@ export function createFilterBar(
   dedupGroup.append(dedupToggle, dedupContainer);
   bar.appendChild(dedupGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Pages selector ─────────────────────────────────────────────────
   const pagesGroup = group("Pages:");
@@ -363,7 +359,7 @@ export function createFilterBar(
   pagesGroup.appendChild(prefetchStatus);
   bar.appendChild(pagesGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Query Builder ──────────────────────────────────────────────────
   const qbGroup = group("Query Builder:");
@@ -385,7 +381,7 @@ export function createFilterBar(
   qbGroup.appendChild(qbApply);
   bar.appendChild(qbGroup);
 
-  if (layout === "bar") bar.appendChild(sep());
+  bar.appendChild(sep());
 
   // ── Sort & Seller helpers ──────────────────────────────────────────
   const helpersGroup = group("");
