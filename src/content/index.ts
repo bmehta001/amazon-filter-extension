@@ -1,7 +1,8 @@
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged } from "../util/storage";
-import { isAmazonSearchPage, buildSortByReviewsUrl, buildAmazonOnlyUrl, getSearchQuery } from "../util/url";
+import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl, getSearchQuery } from "../util/url";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
+import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats, updatePrefetchStatus, type FilterBarLayout } from "./ui/filterBar";
 import { injectCardActions } from "./ui/cardActions";
@@ -43,6 +44,8 @@ const SPONSORED_TOPSLOT_STYLES = `
 
 let currentFilters: FilterState;
 let filterBarHost: HTMLElement | null = null;
+/** Whether we're running on an Amazon Haul page vs. standard search. */
+let isHaulMode = false;
 const fetchReview = createRateLimitedFetcher(2, 500);
 /** Map ASIN → ReviewScore for products already scored this session. */
 const reviewScoreMap = new Map<string, ReviewScore>();
@@ -55,9 +58,10 @@ const reviewDataMap = new Map<string, ProductReviewData>();
  * Main entry point — runs when the content script is injected.
  */
 async function main(): Promise<void> {
-  if (!isAmazonSearchPage()) return;
+  isHaulMode = isAmazonHaulPage();
+  if (!isHaulMode && !isAmazonSearchPage()) return;
 
-  console.log("[BAS] Better Amazon Search activated");
+  console.log(`[BAS] Better Amazon Search activated (${isHaulMode ? "Haul" : "Search"} mode)`);
 
   // Inject global styles
   injectGlobalStyles();
@@ -75,8 +79,8 @@ async function main(): Promise<void> {
   // Initial filtering pass
   await filterAllProducts();
 
-  // Start background pagination if viewing multiple pages
-  if (currentFilters.totalPages > 1) {
+  // Start background pagination if viewing multiple pages (not on Haul — Haul uses infinite scroll)
+  if (!isHaulMode && currentFilters.totalPages > 1) {
     startBackgroundPagination();
   }
 
@@ -119,7 +123,8 @@ async function injectFilterBar(): Promise<void> {
       filterBarHost.remove();
     }
 
-    const sidebarTarget = findSidebarTarget();
+    // On Haul pages, always use horizontal bar (no sidebar)
+    const sidebarTarget = isHaulMode ? null : findSidebarTarget();
     const layout: FilterBarLayout = sidebarTarget ? "sidebar" : "bar";
 
     filterBarHost = createFilterBar(currentFilters, {
@@ -135,16 +140,16 @@ async function injectFilterBar(): Promise<void> {
       return;
     }
 
-    const insertionPoint = findInsertionPoint();
+    const insertionPoint = isHaulMode ? findHaulInsertionPoint() : findInsertionPoint();
     if (insertionPoint) {
       insertionPoint.before(filterBarHost);
-      console.log("[BAS] Filter bar injected above results");
+      console.log(`[BAS] Filter bar injected above ${isHaulMode ? "Haul" : "search"} results`);
       return;
     }
 
-    const fallback =
-      document.querySelector("#search") ||
-      document.querySelector('[data-component-type="s-search-results"]');
+    const fallback = isHaulMode
+      ? (document.querySelector("main") || document.querySelector('[role="main"]'))
+      : (document.querySelector("#search") || document.querySelector('[data-component-type="s-search-results"]'));
     if (fallback) {
       fallback.prepend(filterBarHost);
       console.log("[BAS] Filter bar injected into #search fallback");
@@ -181,7 +186,9 @@ function watchForSoftNavigation(): void {
       lastUrl = location.href;
       console.log("[BAS] Soft navigation detected:", lastUrl);
 
-      if (!isAmazonSearchPage()) return;
+      // Update mode — user might navigate between search and Haul
+      isHaulMode = isAmazonHaulPage();
+      if (!isAmazonSupportedPage()) return;
 
       // Re-inject filter bar if it was removed from DOM
       if (!filterBarHost?.parentElement) {
@@ -193,7 +200,8 @@ function watchForSoftNavigation(): void {
   }, CHECK_INTERVAL_MS);
 
   // Also watch for DOM replacement of the results container
-  const searchContainer = document.querySelector("#search");
+  const searchContainer = document.querySelector("#search") ||
+    (isHaulMode ? document.querySelector("main, [role='main']") : null);
   if (searchContainer) {
     const navObserver = new MutationObserver(() => {
       if (filterBarHost && !filterBarHost.parentElement) {
@@ -209,7 +217,7 @@ function watchForSoftNavigation(): void {
  * Apply filters to all products on the page.
  */
 async function filterAllProducts(): Promise<void> {
-  const products = extractAllProducts();
+  const products = isHaulMode ? extractAllHaulProducts() : extractAllProducts();
   let shown = 0;
 
   // First pass: apply individual filters
@@ -411,6 +419,45 @@ function findInsertionPoint(): Element | null {
     document.querySelector("#search .s-desktop-content") ||
     null
   );
+}
+
+/**
+ * Find insertion point on Amazon Haul pages.
+ * Haul is a React SPA — look for the main content grid area.
+ */
+function findHaulInsertionPoint(): Element | null {
+  return (
+    // Look for product grid containers
+    document.querySelector('[data-testid*="product-grid"]') ||
+    document.querySelector('[class*="product-grid"]') ||
+    document.querySelector('[class*="ProductGrid"]') ||
+    // Look for main content areas
+    document.querySelector("main > div") ||
+    document.querySelector('[role="main"] > div') ||
+    // Generic grid/list containers with multiple children
+    findFirstGridContainer() ||
+    null
+  );
+}
+
+/**
+ * Find the first grid/flex container that likely holds product cards.
+ * Used as a Haul fallback when specific selectors fail.
+ */
+function findFirstGridContainer(): Element | null {
+  const containers = document.querySelectorAll("div, section");
+  for (const el of containers) {
+    const style = getComputedStyle(el);
+    const isGrid = style.display === "grid" || style.display === "flex";
+    const hasMultipleChildren = el.children.length >= 6;
+    const hasImages = el.querySelectorAll("img").length >= 3;
+    // Avoid picking up navbars or footers
+    const isMainArea = !el.closest("nav, header, footer, #navbar");
+    if (isGrid && hasMultipleChildren && hasImages && isMainArea) {
+      return el;
+    }
+  }
+  return null;
 }
 
 /**

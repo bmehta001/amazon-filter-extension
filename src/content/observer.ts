@@ -1,7 +1,9 @@
 import { extractProduct, getProductCards } from "./extractor";
+import { extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import type { FilterState, Product } from "../types";
 import { isAllowlisted } from "../brand/allowlist";
+import { isAmazonHaulPage } from "../util/url";
 import { debounce } from "../util/debounce";
 
 /** Set of already-processed card elements to avoid duplicate work. */
@@ -69,9 +71,10 @@ export function stopObserving(): void {
  * Re-processes all cards with the new state.
  */
 export async function refilterAll(filterState: FilterState): Promise<void> {
-  const cards = getProductCards();
+  const haulMode = isAmazonHaulPage();
+  const cards = haulMode ? getHaulProductCards() : getProductCards();
   for (const card of cards) {
-    const product = extractProduct(card);
+    const product = haulMode ? extractHaulProduct(card) : extractProduct(card);
     const result = await applyFilters(product, filterState);
     applyFilterResult(card, result);
     if (isAllowlisted(product.brand)) {
@@ -84,13 +87,14 @@ export async function refilterAll(filterState: FilterState): Promise<void> {
  * Process only newly added product cards.
  */
 async function processNewCards(filterState: FilterState): Promise<void> {
-  const cards = getProductCards();
+  const haulMode = isAmazonHaulPage();
+  const cards = haulMode ? getHaulProductCards() : getProductCards();
   const newProducts: Product[] = [];
 
   for (const card of cards) {
     if (!processedCards.has(card)) {
       processedCards.add(card);
-      newProducts.push(extractProduct(card));
+      newProducts.push(haulMode ? extractHaulProduct(card) : extractProduct(card));
     }
   }
 

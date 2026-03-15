@@ -29,6 +29,24 @@ export function isAmazonSearchPage(url: string = location.href): boolean {
   }
 }
 
+/** Check if the current URL is an Amazon Haul page. */
+export function isAmazonHaulPage(url: string = location.href): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname.match(/^www\.amazon\./) !== null &&
+      parsed.pathname.startsWith("/haul")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Check if the current URL is any supported Amazon page (search or Haul). */
+export function isAmazonSupportedPage(url: string = location.href): boolean {
+  return isAmazonSearchPage(url) || isAmazonHaulPage(url);
+}
+
 /** Extract the current search query from the Amazon URL. */
 export function getSearchQuery(url: string = location.href): string {
   try {
