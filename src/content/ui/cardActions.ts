@@ -42,10 +42,15 @@ export function injectCardActions(
     trustBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      await trustBrand(product.brand);
-      trustBtn.textContent = "✅ Trusted!";
-      trustBtn.style.background = "#e6f7e6";
-      onBrandAction();
+      try {
+        await trustBrand(product.brand);
+        trustBtn.textContent = "✅ Trusted!";
+        trustBtn.style.background = "#e6f7e6";
+        onBrandAction();
+      } catch (err) {
+        console.warn("[BAS] Failed to trust brand:", err);
+        trustBtn.textContent = "⚠ Error";
+      }
     });
     container.appendChild(trustBtn);
 
@@ -54,10 +59,15 @@ export function injectCardActions(
     blockBtn.addEventListener("click", async (e) => {
       e.preventDefault();
       e.stopPropagation();
-      await blockBrand(product.brand);
-      blockBtn.textContent = "🚫 Blocked!";
-      blockBtn.style.background = "#fde8e8";
-      onBrandAction();
+      try {
+        await blockBrand(product.brand);
+        blockBtn.textContent = "🚫 Blocked!";
+        blockBtn.style.background = "#fde8e8";
+        onBrandAction();
+      } catch (err) {
+        console.warn("[BAS] Failed to block brand:", err);
+        blockBtn.textContent = "⚠ Error";
+      }
     });
     container.appendChild(blockBtn);
   }

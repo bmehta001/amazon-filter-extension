@@ -89,8 +89,8 @@ function randomCapsScore(name: string): number {
 function nonAsciiScore(name: string): number {
   const ascii = name.replace(/[^\x20-\x7E]/g, "").length;
   if (name.length === 0) return 0;
-  const ratio = ascii / name.length;
-  if (ratio < 0.5) return 0.3;
+  const nonAsciiRatio = (name.length - ascii) / name.length;
+  if (nonAsciiRatio > 0.5) return 0.3;
   return 0;
 }
 

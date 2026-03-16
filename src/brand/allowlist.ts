@@ -61,16 +61,6 @@ export async function isBlocked(brand: string): Promise<boolean> {
   return blocked.map((b) => b.toLowerCase()).includes(brand.trim().toLowerCase());
 }
 
-/** Get the full allowlist for display/debugging. */
-export function getAllowlist(): string[] {
-  return Array.from(allowlistSet);
-}
-
-/** Get the count of brands in the allowlist. */
-export function getAllowlistCount(): number {
-  return allowlistSet.size;
-}
-
 /**
  * Refresh the allowlist from the remote URL.
  * Called by the service worker on a daily schedule.

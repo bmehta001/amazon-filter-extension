@@ -64,26 +64,10 @@ const debouncedSave = debounce(async () => {
 /**
  * Save filter state with debouncing.
  * Updates are coalesced: only the latest state is persisted.
- * Call flushPendingFilterSave() before page unload to ensure no data loss.
  */
 export function saveFilters(filters: FilterState): void {
   pendingFilters = { ...filters };
   debouncedSave();
-}
-
-/**
- * Immediately flush any pending filter save (async version).
- * Use syncFlushPendingFilterSave() in beforeunload/visibilitychange handlers.
- */
-export async function flushPendingFilterSave(): Promise<void> {
-  if (pendingFilters === null) return;
-  const toSave = pendingFilters;
-  pendingFilters = null;
-  try {
-    await saveStorage({ filters: toSave });
-  } catch (err) {
-    console.error("[BAS] Failed to flush filters:", err);
-  }
 }
 
 /**
@@ -100,11 +84,6 @@ export function syncFlushPendingFilterSave(): void {
       console.error("[BAS] Failed to sync-flush filters:", chrome.runtime.lastError.message);
     }
   });
-}
-
-/** Check if there's a pending filter save. */
-export function hasPendingSave(): boolean {
-  return pendingFilters !== null;
 }
 
 /** Load user-managed brand lists. */

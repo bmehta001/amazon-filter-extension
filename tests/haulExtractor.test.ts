@@ -269,9 +269,9 @@ describe("getHaulProductCards", () => {
     document.body.appendChild(card2);
 
     const found = getHaulProductCards();
-    // In JSDOM, getComputedStyle may not return meaningful display values,
-    // but the function should still attempt to find cards
-    expect(found.length).toBeGreaterThanOrEqual(0);
+    // Grid-based fallback detection — in JSDOM getComputedStyle doesn't return
+    // real layout values, so the fallback may not find cards. Just verify no crash.
+    expect(found).toBeInstanceOf(Array);
   });
 
   it("returns empty array when no product cards exist", () => {

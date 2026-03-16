@@ -66,7 +66,6 @@ export function createDistributedFilters(
   const reviewSection = findSidebarSection(sidebar, /^Customer\s*Reviews?$/i);
   const priceSection = findSidebarSection(sidebar, /^Price$/i);
   const brandSection = findSidebarSection(sidebar, /^Brands?$/i);
-  const deptSection = findSidebarSection(sidebar, /^Department$/i);
 
   // ── Shared mutable state ───────────────────────────────────────────
   // Each widget writes to this; emitChange reads from it.

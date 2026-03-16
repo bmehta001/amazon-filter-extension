@@ -104,16 +104,6 @@
   border-color: #949494;
 }
 
-.bas-btn--primary {
-  background: #ffd814;
-  border-color: #fcd200;
-  font-weight: 600;
-}
-
-.bas-btn--primary:hover {
-  background: #f7ca00;
-}
-
 .bas-stats {
   font-size: 11px;
   color: #565959;

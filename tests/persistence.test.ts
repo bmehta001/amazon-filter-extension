@@ -74,9 +74,7 @@ globalThis.chrome = mockChrome;
 const {
   loadFilters,
   saveFilters,
-  flushPendingFilterSave,
   syncFlushPendingFilterSave,
-  hasPendingSave,
   saveStorage,
   onFiltersChanged,
 } = await import("../src/util/storage");
@@ -127,7 +125,6 @@ describe("saveFilters (debounced)", () => {
     saveFilters(filters);
     // Before debounce timer fires, storage should be empty
     expect(storedData.filters).toBeUndefined();
-    expect(hasPendingSave()).toBe(true);
   });
 
   it("saves after debounce delay (300ms)", async () => {
@@ -171,24 +168,6 @@ describe("saveFilters (debounced)", () => {
   });
 });
 
-describe("flushPendingFilterSave", () => {
-  it("immediately writes pending filters", async () => {
-    saveFilters({ ...DEFAULT_FILTERS, minReviews: 777 });
-    expect(storedData.filters).toBeUndefined(); // Not yet saved
-
-    await flushPendingFilterSave();
-    expect((storedData.filters as FilterState).minReviews).toBe(777);
-    expect(hasPendingSave()).toBe(false);
-  });
-
-  it("is a no-op when no save is pending", async () => {
-    const setSpy = vi.spyOn(mockChrome.storage.sync, "set");
-    await flushPendingFilterSave();
-    expect(setSpy).not.toHaveBeenCalled();
-    setSpy.mockRestore();
-  });
-});
-
 describe("syncFlushPendingFilterSave", () => {
   it("synchronously triggers chrome.storage.sync.set for pending filters", () => {
     saveFilters({ ...DEFAULT_FILTERS, minReviews: 999 });
@@ -200,7 +179,6 @@ describe("syncFlushPendingFilterSave", () => {
       { filters: expect.objectContaining({ minReviews: 999 }) },
       expect.any(Function),
     );
-    expect(hasPendingSave()).toBe(false);
     setSpy.mockRestore();
   });
 
@@ -306,7 +284,7 @@ describe("settings persist across page loads (simulated)", () => {
       excludeTokens: ["refurbished", "45W"],
     };
     saveFilters(userFilters);
-    await flushPendingFilterSave();
+    syncFlushPendingFilterSave();
 
     // Session 2: new page load — loadFilters should return the saved state
     const loaded = await loadFilters();
@@ -326,12 +304,12 @@ describe("settings persist across page loads (simulated)", () => {
       hideSponsored: true,
     };
     saveFilters(initialFilters);
-    await flushPendingFilterSave();
+    syncFlushPendingFilterSave();
 
     // Second: update just minReviews — should keep everything else
     const updated: FilterState = { ...initialFilters, minReviews: 1000 };
     saveFilters(updated);
-    await flushPendingFilterSave();
+    syncFlushPendingFilterSave();
 
     const loaded = await loadFilters();
     expect(loaded.minReviews).toBe(1000);

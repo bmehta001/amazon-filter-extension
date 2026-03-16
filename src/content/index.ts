@@ -1,5 +1,5 @@
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged } from "../util/storage";
-import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl, getSearchQuery } from "../util/url";
+import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl } from "../util/url";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";

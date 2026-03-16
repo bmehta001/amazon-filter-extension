@@ -6,8 +6,6 @@ import { parseCount, parseRating, parsePrice, extractAsin } from "../util/parse"
 const SELECTORS = {
   /** Top-level product card container. */
   productCard: 'div[data-component-type="s-search-result"]',
-  /** Title link inside the card. */
-  titleLink: "h2 a.a-link-normal",
   /** Title text span. */
   titleText: "h2 a span, h2 span.a-text-normal",
   /** Star rating (aria-label like "4.5 out of 5 stars"). */

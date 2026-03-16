@@ -1,4 +1,4 @@
-import type { ReviewData } from "./types";
+import type { ReviewData, CategorizedReview, CategorySummary, ProductInsights } from "./types";
 
 /** Category definition type. */
 export interface ReviewCategory {
@@ -8,30 +8,6 @@ export interface ReviewCategory {
   description: string;
   keywords: string[];
   isProductRelated: boolean;
-}
-
-/** Result of categorizing a single review. */
-export interface CategorizedReview {
-  review: ReviewData;
-  categories: string[];
-  primaryCategory: string | null;
-}
-
-/** Summary of one category across all reviews. */
-export interface CategorySummary {
-  categoryId: string;
-  count: number;
-  percentage: number;
-  avgRating: number;
-  sampleSnippet: string;
-}
-
-/** Full categorization result for a product. */
-export interface ProductInsights {
-  categorySummaries: CategorySummary[];
-  categorizedReviews: CategorizedReview[];
-  adjustedRating: number;
-  adjustedReviewCount: number;
 }
 
 /** All available review categories. */
