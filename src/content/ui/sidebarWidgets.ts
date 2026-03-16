@@ -28,6 +28,8 @@ export interface DistributedCallbacks {
 
 /** All widgets injected into the sidebar, for cleanup. */
 let injectedWidgets: HTMLElement[] = [];
+/** Amazon brand section we enhanced (for cleanup of injected elements). */
+let enhancedBrandSection: Element | null = null;
 
 /**
  * Remove all previously injected distributed widgets from the DOM.
@@ -37,6 +39,16 @@ export function cleanupDistributedFilters(): void {
     w.remove();
   }
   injectedWidgets = [];
+
+  // Clean up elements injected into Amazon's brand section
+  if (enhancedBrandSection) {
+    enhancedBrandSection.querySelectorAll(".bas-brand-exclude-btn").forEach((el) => el.remove());
+    enhancedBrandSection.querySelectorAll(".bas-brand-controls").forEach((el) => el.remove());
+    enhancedBrandSection.querySelectorAll(".bas-brand-item-excluded").forEach((el) => {
+      el.classList.remove("bas-brand-item-excluded");
+    });
+    enhancedBrandSection = null;
+  }
 }
 
 /**
@@ -273,43 +285,38 @@ export function createDistributedFilters(
   injectAfterSection(priceSection, priceWidget, sidebar);
   injectedWidgets.push(priceWidget);
 
-  // ── 4. Brand widget (after Brand section) ──────────────────────────
-  const brandWidget = createWidget("🏷️ Brand Filters", (container) => {
-    // Brand mode
-    const modeGroup = wGroup("Mode:", "Filter by brand trust level");
-    refs.brandSelect = document.createElement("select");
-    refs.brandSelect.className = "bas-w-select";
-    const brandOptions: [BrandMode, string][] = [
-      ["off", "Off"],
-      ["dim", "Dim Unknown"],
-      ["hide", "Hide Suspicious"],
-      ["trusted-only", "Trusted Only"],
-    ];
-    for (const [val, label] of brandOptions) {
-      const opt = document.createElement("option");
-      opt.value = val;
-      opt.textContent = label;
-      if (val === initialState.brandMode) opt.selected = true;
-      refs.brandSelect.appendChild(opt);
-    }
-    refs.brandSelect.addEventListener("change", emitChange);
-    modeGroup.appendChild(refs.brandSelect);
-    container.appendChild(modeGroup);
+  // ── 4. Brand: enhance Amazon's native section ──────────────────────
+  // Instead of a separate widget, inject exclude buttons + mode dropdown
+  // directly into Amazon's existing Brand section for a unified UX.
+  refs.excludedBrands = new Set(initialState.excludedBrands ?? []);
+  refs.brandSelect = document.createElement("select"); // created below inside enhanceBrandSection
 
-    // Exclude Brands (uses the excludeTokens mechanism for now)
-    const excludeGroup = wGroup("Exclude Brands:", "Comma-separated brand names to always hide");
-    refs.excludeBrandsInput = document.createElement("textarea");
-    refs.excludeBrandsInput.className = "bas-w-textarea";
-    refs.excludeBrandsInput.placeholder = "BrandA, BrandB, ...";
-    // Extract brand exclusions from excludeTokens that match known brand patterns
-    refs.excludeBrandsInput.value = "";
-    refs.excludeBrandsInput.addEventListener("change", emitChange);
-    excludeGroup.appendChild(refs.excludeBrandsInput);
-    container.appendChild(excludeGroup);
-  });
+  if (brandSection) {
+    enhanceBrandSection(brandSection, refs, initialState, emitChange);
+    enhancedBrandSection = brandSection;
+  } else {
+    // Fallback: create a minimal brand widget if Amazon's section not found
+    const brandWidget = createWidget("🏷️ Brand Filters", (container) => {
+      const modeGroup = wGroup("Mode:", "Filter by brand trust level");
+      refs.brandSelect = buildBrandModeSelect(initialState.brandMode, emitChange);
+      modeGroup.appendChild(refs.brandSelect);
+      container.appendChild(modeGroup);
 
-  injectAfterSection(brandSection, brandWidget, sidebar);
-  injectedWidgets.push(brandWidget);
+      const excludeGroup = wGroup("Exclude Brands:", "Click brand names below or type comma-separated brand names to always hide");
+      refs.excludeBrandsInput = document.createElement("textarea");
+      refs.excludeBrandsInput.className = "bas-w-textarea";
+      refs.excludeBrandsInput.placeholder = "BrandA, BrandB, ...";
+      refs.excludeBrandsInput.value = (initialState.excludedBrands ?? []).join(", ");
+      refs.excludeBrandsInput.addEventListener("change", () => {
+        refs.excludedBrands = new Set(parseTokens(refs.excludeBrandsInput!.value));
+        emitChange();
+      });
+      excludeGroup.appendChild(refs.excludeBrandsInput);
+      container.appendChild(excludeGroup);
+    });
+    injectAfterSection(null, brandWidget, sidebar);
+    injectedWidgets.push(brandWidget);
+  }
 
   return mainWidget;
 }
@@ -455,9 +462,10 @@ interface WidgetRefs {
   // Price widget
   priceMin: HTMLInputElement;
   priceMax: HTMLInputElement;
-  // Brand widget
+  // Brand (integrated into Amazon's section)
   brandSelect: HTMLSelectElement;
-  excludeBrandsInput: HTMLTextAreaElement;
+  excludedBrands: Set<string>;
+  excludeBrandsInput?: HTMLTextAreaElement; // fallback only
 }
 
 function gatherState(refs: WidgetRefs, state: FilterState): void {
@@ -481,15 +489,17 @@ function gatherState(refs: WidgetRefs, state: FilterState): void {
   state.priceMax = refs.priceMax?.value ? parseFloat(refs.priceMax.value) : null;
   state.brandMode = (refs.brandSelect?.value as BrandMode) ?? state.brandMode;
 
-  // Merge brand exclusions into excludeTokens (brand names act as keyword exclusions)
-  if (refs.excludeBrandsInput?.value.trim()) {
-    const brandExcludes = parseTokens(refs.excludeBrandsInput.value);
-    const combined = [...state.excludeTokens];
-    for (const b of brandExcludes) {
-      if (!combined.includes(b)) combined.push(b);
-    }
-    state.excludeTokens = combined;
+  // Collect excluded brands from the integrated UI or fallback textarea
+  const excluded: string[] = [];
+  if (refs.excludedBrands?.size) {
+    excluded.push(...refs.excludedBrands);
   }
+  if (refs.excludeBrandsInput?.value.trim()) {
+    for (const b of parseTokens(refs.excludeBrandsInput.value)) {
+      if (!excluded.includes(b)) excluded.push(b);
+    }
+  }
+  state.excludedBrands = excluded;
 }
 
 // ── DOM element factories ─────────────────────────────────────────────
@@ -604,4 +614,245 @@ function parseTokens(text: string): string[] {
     .split(/[,\n]/)
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+}
+
+// ── Amazon Brand Section Enhancement ──────────────────────────────────
+
+/** CSS injected into the page (not Shadow DOM) to style brand exclude buttons. */
+const BRAND_ENHANCE_STYLES = `
+  .bas-brand-exclude-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: #949494;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    margin-left: 4px;
+    padding: 0;
+    vertical-align: middle;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .bas-brand-exclude-btn:hover {
+    background: #fdd;
+    border-color: #c44;
+    color: #c44;
+  }
+  .bas-brand-exclude-btn.bas-excluded {
+    background: #c44;
+    border-color: #a33;
+    color: #fff;
+  }
+  .bas-brand-exclude-btn.bas-excluded:hover {
+    background: #a33;
+  }
+  .bas-brand-item-excluded > a,
+  .bas-brand-item-excluded > span {
+    text-decoration: line-through;
+    opacity: 0.5;
+  }
+  .bas-brand-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0 4px;
+    border-top: 1px solid #e8d5a3;
+    margin-top: 6px;
+  }
+  .bas-brand-controls label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #565959;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .bas-brand-controls select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid #a2a6ac;
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+  }
+  .bas-brand-controls select:focus {
+    border-color: #ff9900;
+    outline: none;
+  }
+  .bas-brand-excluded-summary {
+    font-size: 11px;
+    color: #c45500;
+    padding: 4px 0;
+    cursor: pointer;
+  }
+  .bas-brand-excluded-summary:hover {
+    text-decoration: underline;
+  }
+`;
+
+/** Inject brand enhancement styles into the page head (idempotent). */
+function ensureBrandStyles(): void {
+  const id = "bas-brand-enhance-styles";
+  if (document.getElementById(id)) return;
+  const style = document.createElement("style");
+  style.id = id;
+  style.textContent = BRAND_ENHANCE_STYLES;
+  document.head.appendChild(style);
+}
+
+/** Build the brand mode <select> dropdown. */
+function buildBrandModeSelect(currentMode: BrandMode, onChange: () => void): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.className = "bas-w-select";
+  const options: [BrandMode, string][] = [
+    ["off", "Off"],
+    ["dim", "Dim Unknown"],
+    ["hide", "Hide Suspicious"],
+    ["trusted-only", "Trusted Only"],
+  ];
+  for (const [val, label] of options) {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === currentMode) opt.selected = true;
+    select.appendChild(opt);
+  }
+  select.addEventListener("change", onChange);
+  return select;
+}
+
+/**
+ * Extract brand name from an Amazon sidebar brand list item.
+ * Amazon brand items are typically <li> elements containing <a> links
+ * with a checkbox icon and brand text in a <span>.
+ */
+function extractBrandName(item: Element): string | null {
+  // Try aria-label on the link (often "Brand Name")
+  const link = item.querySelector("a");
+  if (link?.ariaLabel) return link.ariaLabel.trim();
+
+  // Try the text content of spans (skip checkbox icons)
+  const spans = item.querySelectorAll("span.a-size-base");
+  for (const span of spans) {
+    const text = span.textContent?.trim();
+    if (text && text.length > 1 && !text.includes("checkbox")) return text;
+  }
+
+  // Fallback: use visible text content, stripped of leading checkbox char
+  const text = item.textContent?.trim().replace(/^[\s✓☐☑✔]+/, "").trim();
+  return text && text.length > 1 ? text : null;
+}
+
+/**
+ * Enhance Amazon's native Brand sidebar section with exclude buttons.
+ * Injects a small ✕ button next to each brand name. Clicking it toggles
+ * exclusion for that brand. Also appends a brand mode dropdown at the bottom.
+ */
+function enhanceBrandSection(
+  section: Element,
+  refs: WidgetRefs,
+  initialState: FilterState,
+  emitChange: () => void,
+): void {
+  ensureBrandStyles();
+
+  // Find all brand list items in Amazon's section
+  const brandItems = section.querySelectorAll("li");
+
+  for (const item of brandItems) {
+    const brandName = extractBrandName(item);
+    if (!brandName) continue;
+
+    // Skip if we already enhanced this item
+    if (item.querySelector(".bas-brand-exclude-btn")) continue;
+
+    const btn = document.createElement("button");
+    btn.className = "bas-brand-exclude-btn";
+    btn.textContent = "✕";
+    btn.title = `Exclude "${brandName}"`;
+
+    if (refs.excludedBrands.has(brandName.toLowerCase())) {
+      btn.classList.add("bas-excluded");
+      btn.title = `Stop excluding "${brandName}"`;
+      item.classList.add("bas-brand-item-excluded");
+    }
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = brandName.toLowerCase();
+      if (refs.excludedBrands.has(key)) {
+        refs.excludedBrands.delete(key);
+        btn.classList.remove("bas-excluded");
+        btn.title = `Exclude "${brandName}"`;
+        item.classList.remove("bas-brand-item-excluded");
+      } else {
+        refs.excludedBrands.add(key);
+        btn.classList.add("bas-excluded");
+        btn.title = `Stop excluding "${brandName}"`;
+        item.classList.add("bas-brand-item-excluded");
+      }
+      updateExcludedSummary(section, refs.excludedBrands);
+      emitChange();
+    });
+
+    // Insert the button at the end of the list item
+    item.style.display = "flex";
+    item.style.alignItems = "center";
+    item.appendChild(btn);
+  }
+
+  // Add our controls at the bottom of Amazon's section
+  if (!section.querySelector(".bas-brand-controls")) {
+    const controls = document.createElement("div");
+    controls.className = "bas-brand-controls";
+
+    // Brand mode dropdown
+    const modeLabel = document.createElement("label");
+    modeLabel.textContent = "Trust filter:";
+    modeLabel.title = "Filter by brand trust level (dim, hide, or show only trusted brands)";
+    refs.brandSelect = buildBrandModeSelect(initialState.brandMode, emitChange);
+    controls.append(modeLabel, refs.brandSelect);
+
+    // Excluded summary
+    const summary = document.createElement("div");
+    summary.className = "bas-brand-excluded-summary";
+    summary.id = "bas-brand-excluded-summary";
+    updateExcludedSummaryEl(summary, refs.excludedBrands);
+    summary.title = "Click to clear all excluded brands";
+    summary.addEventListener("click", () => {
+      refs.excludedBrands.clear();
+      // Reset all exclude buttons
+      section.querySelectorAll(".bas-brand-exclude-btn.bas-excluded").forEach((b) => {
+        b.classList.remove("bas-excluded");
+        b.parentElement?.classList.remove("bas-brand-item-excluded");
+      });
+      updateExcludedSummary(section, refs.excludedBrands);
+      emitChange();
+    });
+    controls.appendChild(summary);
+
+    section.appendChild(controls);
+  }
+}
+
+function updateExcludedSummaryEl(el: HTMLElement, excluded: Set<string>): void {
+  if (excluded.size === 0) {
+    el.textContent = "Click ✕ next to a brand to exclude it";
+    el.style.color = "#565959";
+  } else {
+    el.textContent = `${excluded.size} brand${excluded.size > 1 ? "s" : ""} excluded (click to clear)`;
+    el.style.color = "#c45500";
+  }
+}
+
+function updateExcludedSummary(section: Element, excluded: Set<string>): void {
+  const el = section.querySelector("#bas-brand-excluded-summary") as HTMLElement | null;
+  if (el) updateExcludedSummaryEl(el, excluded);
 }

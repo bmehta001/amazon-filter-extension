@@ -24,6 +24,7 @@ export interface FilterState {
   priceMin: number | null;
   priceMax: number | null;
   excludeTokens: string[];
+  excludedBrands: string[];
   brandMode: BrandMode;
   hideSponsored: boolean;
   queryBuilder: boolean;
@@ -51,6 +52,7 @@ export const DEFAULT_FILTERS: FilterState = {
   priceMin: null,
   priceMax: null,
   excludeTokens: [],
+  excludedBrands: [],
   brandMode: "off",
   hideSponsored: false,
   queryBuilder: false,

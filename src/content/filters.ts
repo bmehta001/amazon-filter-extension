@@ -20,6 +20,11 @@ export async function applyFilters(
     return "hide";
   }
 
+  // P1b: Excluded brands (set via sidebar ✕ buttons)
+  if (matchesExcludedBrands(product, state.excludedBrands)) {
+    return "hide";
+  }
+
   // P2: Minimum reviews
   if (product.reviewCount < state.minReviews) {
     return "hide";
@@ -80,6 +85,17 @@ function matchesExcludeTokens(product: Product, tokens: string[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Check if product brand matches any excluded brand names.
+ * Uses case-insensitive exact match on the brand field.
+ */
+function matchesExcludedBrands(product: Product, brands: string[]): boolean {
+  if (!brands || brands.length === 0) return false;
+  const productBrand = product.brand?.toLowerCase();
+  if (!productBrand) return false;
+  return brands.some((b) => productBrand.includes(b.toLowerCase()));
 }
 
 /**

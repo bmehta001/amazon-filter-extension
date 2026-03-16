@@ -23,11 +23,28 @@ function createMockSidebar(sections: string[]): HTMLElement {
 
     const list = document.createElement("ul");
     list.className = "a-unordered-list a-nostyle a-vertical";
-    const li = document.createElement("li");
-    li.textContent = `Sample ${name} option`;
-    list.appendChild(li);
-    section.appendChild(list);
 
+    if (name === "Brand") {
+      // Create realistic brand list items with links and spans
+      for (const brand of ["Sony", "Bose", "Apple"]) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = "#";
+        a.ariaLabel = brand;
+        const span = document.createElement("span");
+        span.className = "a-size-base";
+        span.textContent = brand;
+        a.appendChild(span);
+        li.appendChild(a);
+        list.appendChild(li);
+      }
+    } else {
+      const li = document.createElement("li");
+      li.textContent = `Sample ${name} option`;
+      list.appendChild(li);
+    }
+
+    section.appendChild(list);
     sidebar.appendChild(section);
   }
 
@@ -75,8 +92,8 @@ describe("createDistributedFilters", () => {
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
     const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
-    // Expect: main + review + brand + price = 4 widgets
-    expect(widgets.length).toBe(4);
+    // Expect: main + review + price = 3 widgets (brand is enhanced in-place)
+    expect(widgets.length).toBe(3);
   });
 
   it("places review widget after Customer Review section", () => {
@@ -137,20 +154,41 @@ describe("createDistributedFilters", () => {
     expect(foundPriceSection).toBe(true);
   });
 
-  it("places brand widget after Brand section", () => {
+  it("enhances Amazon's Brand section with exclude buttons", () => {
     const sidebar = createMockSidebar(["Brand"]);
     document.body.appendChild(sidebar);
 
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
-    const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
-    let hasBrandWidget = false;
-    for (const w of widgets) {
-      if (w.shadowRoot?.textContent?.includes("Brand Filters")) {
-        hasBrandWidget = true;
-      }
-    }
-    expect(hasBrandWidget).toBe(true);
+    // Exclude buttons should be injected into each brand list item
+    const excludeBtns = sidebar.querySelectorAll(".bas-brand-exclude-btn");
+    expect(excludeBtns.length).toBe(3); // Sony, Bose, Apple
+
+    // Brand mode dropdown should be in the controls area
+    const controls = sidebar.querySelector(".bas-brand-controls");
+    expect(controls).not.toBeNull();
+    expect(controls!.querySelector("select")).not.toBeNull();
+  });
+
+  it("excludes a brand when exclude button is clicked", () => {
+    const sidebar = createMockSidebar(["Brand"]);
+    document.body.appendChild(sidebar);
+
+    let changedState: FilterState | null = null;
+    const callbacks = {
+      ...noopCallbacks,
+      onFilterChange: (state: FilterState) => { changedState = state; },
+    };
+
+    createDistributedFilters(DEFAULT_FILTERS, callbacks, sidebar);
+
+    // Click the exclude button for the first brand (Sony)
+    const excludeBtn = sidebar.querySelector(".bas-brand-exclude-btn") as HTMLButtonElement;
+    expect(excludeBtn).not.toBeNull();
+    excludeBtn.click();
+
+    expect(changedState).not.toBeNull();
+    expect(changedState!.excludedBrands).toContain("sony");
   });
 
   it("still works when no Amazon sections are found", () => {
@@ -160,6 +198,7 @@ describe("createDistributedFilters", () => {
     const host = createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
     // All widgets should still be injected (fallback positions)
+    // main + review + price + brand fallback = 4 widgets
     const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
     expect(widgets.length).toBe(4);
     expect(host).toBeInstanceOf(HTMLElement);
@@ -195,20 +234,15 @@ describe("createDistributedFilters", () => {
     expect(changedState!.hideSponsored).toBe(true);
   });
 
-  it("includes brand exclusion textarea", () => {
+  it("shows excluded brand summary in Amazon's section", () => {
     const sidebar = createMockSidebar(["Brand"]);
     document.body.appendChild(sidebar);
 
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
-    const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
-    let hasExcludeBrands = false;
-    for (const w of widgets) {
-      if (w.shadowRoot?.textContent?.includes("Exclude Brands")) {
-        hasExcludeBrands = true;
-      }
-    }
-    expect(hasExcludeBrands).toBe(true);
+    const summary = sidebar.querySelector("#bas-brand-excluded-summary");
+    expect(summary).not.toBeNull();
+    expect(summary!.textContent).toContain("Click");
   });
 });
 
@@ -223,10 +257,14 @@ describe("cleanupDistributedFilters", () => {
     document.body.appendChild(sidebar);
 
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
-    expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(4);
+    // main + review + price = 3 widgets (brand is enhanced in-place)
+    expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(3);
 
     cleanupDistributedFilters();
     expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(0);
+    // Brand enhancement elements should also be cleaned up
+    expect(sidebar.querySelectorAll(".bas-brand-exclude-btn").length).toBe(0);
+    expect(sidebar.querySelectorAll(".bas-brand-controls").length).toBe(0);
   });
 });
 

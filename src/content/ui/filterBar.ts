@@ -416,6 +416,7 @@ export function createFilterBar(
       priceMin: priceMin.value ? parseFloat(priceMin.value) : null,
       priceMax: priceMax.value ? parseFloat(priceMax.value) : null,
       excludeTokens: parseExcludeTokens(excludeTextarea.value),
+      excludedBrands: [],
       brandMode: brandSelect.value as BrandMode,
       hideSponsored: sponsoredCb.checked,
       queryBuilder: qbCb.checked,
