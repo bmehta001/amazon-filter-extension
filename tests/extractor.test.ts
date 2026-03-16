@@ -75,12 +75,17 @@ function createMockCard(opts: {
     card.appendChild(priceSpan);
   }
 
-  // Brand
+  // Brand - simulate Amazon's "by BrandName" pattern
   if (opts.brand) {
+    const brandRow = document.createElement("div");
+    brandRow.className = "a-row a-size-base";
+    const byText = document.createTextNode("by ");
+    brandRow.appendChild(byText);
     const brandSpan = document.createElement("span");
     brandSpan.className = "a-size-base-plus a-color-base";
     brandSpan.textContent = opts.brand;
-    card.appendChild(brandSpan);
+    brandRow.appendChild(brandSpan);
+    card.appendChild(brandRow);
   }
 
   // Sponsored

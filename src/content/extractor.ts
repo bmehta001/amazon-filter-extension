@@ -16,9 +16,6 @@ const SELECTORS = {
   price: "span.a-price span.a-offscreen, span.a-price-whole",
   /** Price fraction (cents). */
   priceFraction: "span.a-price-fraction",
-  /** Brand name line below the title. */
-  brand:
-    "span.a-size-base-plus.a-color-base, h5.s-line-clamp-1 span, span.a-size-base.a-color-secondary + span",
 } as const;
 
 /**
@@ -123,30 +120,23 @@ function extractPrice(card: HTMLElement): number | null {
 }
 
 function extractBrand(card: HTMLElement, title: string): string {
-  // Try explicit brand element
-  const brandEl = card.querySelector(SELECTORS.brand);
-  if (brandEl?.textContent?.trim()) {
-    let text = brandEl.textContent.trim();
-    // Clean up common Amazon wrapping patterns
-    text = text
-      .replace(/^visit\s+the\s+/i, "")
-      .replace(/\s+store$/i, "")
-      .replace(/\s+shop$/i, "")
-      .replace(/^see\s+all\s+.*$/i, "")
-      .replace(/^shop\s+/i, "")
-      .trim();
-    if (
-      text.length > 0 &&
-      text.length < 100 &&
-      !text.toLowerCase().includes("result") &&
-      !text.startsWith("$") &&
-      !text.toLowerCase().startsWith("see ")
-    ) {
-      return text;
+  // Strategy 1: Dedicated brand row — a link or span directly under the title.
+  // Amazon typically renders the brand as a link immediately after the <h2>.
+  const h2 = card.querySelector("h2");
+  if (h2) {
+    // Walk siblings of the h2's parent to find brand text
+    const h2Container = h2.closest(".a-section, .a-row, div") || h2.parentElement;
+    if (h2Container) {
+      // Look for "by BrandName" links right after the title
+      const byLink = h2Container.querySelector('a[href*="/s?"], a[href*="field-brandtextbin"]');
+      if (byLink?.textContent?.trim()) {
+        const text = byLink.textContent.trim();
+        if (text.length > 0 && text.length < 60) return text;
+      }
     }
   }
 
-  // Fallback: look for "Visit the X Store" pattern (common on Amazon)
+  // Strategy 2: "Visit the X Store" pattern (very reliable when present)
   const visitPattern = card.textContent?.match(
     /Visit the\s+(.+?)\s+Store/i,
   );
@@ -154,18 +144,54 @@ function extractBrand(card: HTMLElement, title: string): string {
     return visitPattern[1].trim();
   }
 
-  // Fallback: "by BrandName" or "Brand: BrandName"
+  // Strategy 3: "by BrandName" or "Brand: BrandName" anywhere in the card
   const byPattern = card.textContent?.match(
-    /(?:by|Brand:)\s+([A-Za-z0-9][A-Za-z0-9 &'.+-]{1,40})/,
+    /\bby\s+([A-Z][A-Za-z0-9 &'.+-]{0,39})/,
   );
   if (byPattern) {
-    return byPattern[1].trim();
+    const brand = byPattern[1].trim();
+    // Filter out false positives: "by" followed by generic words
+    const falsePositives = /^(Amazon|the |this |that |a |an )/i;
+    if (!falsePositives.test(brand) && brand.length > 1) {
+      return brand;
+    }
   }
 
-  // Last resort: first few words of title, but only if they look brand-like
-  const titleStart = title.split(/\s+/).slice(0, 2).join(" ");
-  if (!/^(the|a|an|best|top|new|wireless|electric|portable|premium)\b/i.test(titleStart)) {
-    return titleStart;
+  // Strategy 4: Explicit brand element (narrower selectors)
+  // Only use the span immediately following a "by" text node or in a brand-specific row
+  const brandRow = card.querySelector(
+    'div.a-row.a-size-base > span.a-size-base-plus.a-color-base, ' +
+    'h5.s-line-clamp-1 > span',
+  );
+  if (brandRow?.textContent?.trim()) {
+    let text = brandRow.textContent.trim();
+    text = text
+      .replace(/^visit\s+the\s+/i, "")
+      .replace(/\s+store$/i, "")
+      .replace(/\s+shop$/i, "")
+      .replace(/^see\s+all\s+.*$/i, "")
+      .replace(/^shop\s+/i, "")
+      .replace(/^by\s+/i, "")
+      .trim();
+    if (
+      text.length > 0 &&
+      text.length < 60 &&
+      !text.toLowerCase().includes("result") &&
+      !text.startsWith("$") &&
+      !/^\d/.test(text) &&
+      !text.toLowerCase().startsWith("see ")
+    ) {
+      return text;
+    }
+  }
+
+  // Strategy 5: aria-label on brand links
+  const brandLink = card.querySelector<HTMLAnchorElement>(
+    'a[href*="brandtextbin"], a[aria-label*="brand" i]',
+  );
+  if (brandLink) {
+    const label = brandLink.ariaLabel || brandLink.textContent?.trim();
+    if (label && label.length > 0 && label.length < 60) return label;
   }
 
   return "Unknown";
