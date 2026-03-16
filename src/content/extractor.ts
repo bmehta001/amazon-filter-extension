@@ -6,10 +6,13 @@ import { parseCount, parseRating, parsePrice, extractAsin } from "../util/parse"
 const SELECTORS = {
   /** Top-level product card container. */
   productCard: 'div[data-component-type="s-search-result"]',
-  /** Title text span. */
-  titleText: "h2 a span, h2 span.a-text-normal",
-  /** Star rating (aria-label like "4.5 out of 5 stars"). */
-  rating: 'i.a-icon-star-small span.a-icon-alt, span[aria-label*="star"]',
+  /** Title text span (multiple patterns for different Amazon layouts). */
+  titleText: "h2 a span, h2 span.a-text-normal, h2.a-text-normal > span, h2 > span",
+  /** Star rating text (inside icon-alt spans within star icons). */
+  rating:
+    'i[class*="a-icon-star"] span.a-icon-alt, ' +
+    'a[aria-label*="out of 5 stars"], ' +
+    'span[aria-label*="star"]',
   /** Price (offscreen or visible). */
   price: "span.a-price span.a-offscreen, span.a-price-whole",
   /** Price fraction (cents). */
@@ -142,14 +145,14 @@ function extractBrand(card: HTMLElement, title: string): string {
     return visitPattern[1].trim();
   }
 
-  // Strategy 3: "by BrandName" or "Brand: BrandName" anywhere in the card
+  // Strategy 3: "by BrandName" anywhere in the card.
+  // Limit to brand name only (1-3 words), stopping at model numbers/descriptors.
   const byPattern = card.textContent?.match(
-    /\bby\s+([A-Z][A-Za-z0-9 &'.+-]{0,39})/,
+    /\bby\s+([A-Z][A-Za-z&'.+-]+(?:\s+[A-Z][A-Za-z&'.+-]+){0,2})/,
   );
   if (byPattern) {
     const brand = byPattern[1].trim();
-    // Filter out false positives: "by" followed by generic words
-    const falsePositives = /^(Amazon|the |this |that |a |an )/i;
+    const falsePositives = /^(Amazon|the|this|that|an?)\b/i;
     if (!falsePositives.test(brand) && brand.length > 1) {
       return brand;
     }
@@ -190,6 +193,32 @@ function extractBrand(card: HTMLElement, title: string): string {
   if (brandLink) {
     const label = brandLink.ariaLabel || brandLink.textContent?.trim();
     if (label && label.length > 0 && label.length < 60) return label;
+  }
+
+  // Strategy 6: Extract brand from the product title (first word heuristic).
+  // Amazon often puts the brand as the first word(s) of the title.
+  // Skip common generic/descriptive words that aren't brands.
+  if (title) {
+    const genericStarters = new Set([
+      "wireless", "bluetooth", "true", "sports", "premium", "professional",
+      "portable", "mini", "ultra", "super", "new", "upgraded", "original",
+      "genuine", "official", "authentic", "classic", "advanced", "smart",
+      "digital", "electric", "automatic", "universal", "adjustable",
+      "waterproof", "rechargeable", "foldable", "lightweight", "compact",
+      "heavy", "duty", "high", "quality", "best", "top", "pro", "max",
+      "the", "a", "an", "for", "with", "and", "in", "on", "to", "of",
+      "2024", "2025", "2026",
+    ]);
+    const firstWord = title.split(/[\s,\-]+/)[0];
+    if (
+      firstWord &&
+      firstWord.length >= 2 &&
+      firstWord.length <= 30 &&
+      !genericStarters.has(firstWord.toLowerCase()) &&
+      /^[A-Z]/.test(firstWord)
+    ) {
+      return firstWord;
+    }
   }
 
   return "Unknown";
