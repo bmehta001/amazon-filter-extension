@@ -339,15 +339,15 @@ test.describe("Settings Persistence", () => {
     await page.close();
   });
 
-  test("CCC button opens CamelCamelCamel in new tab", async () => {
+  test("Price History button opens CamelCamelCamel in new tab", async () => {
     const page = await context.newPage();
     await navigateToMockSearch(page);
 
     // Wait for card actions to be injected
     await page.waitForTimeout(500);
 
-    // Find and click the first CCC button
-    const cccButton = page.locator(".bas-card-actions button").filter({ hasText: "CCC" }).first();
+    // Find and click the first Price History button
+    const cccButton = page.locator(".bas-card-actions button").filter({ hasText: "Price History" }).first();
 
     // Listen for new page (popup/tab)
     const [newPage] = await Promise.all([

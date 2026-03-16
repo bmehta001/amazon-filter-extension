@@ -27,7 +27,7 @@ export function injectCardActions(
   `;
 
   // CCC button
-  const cccBtn = createButton("📈 CCC", "View price history on CamelCamelCamel");
+  const cccBtn = createButton("📈 Price History", "View price history on CamelCamelCamel");
   cccBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
