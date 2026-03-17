@@ -2,7 +2,8 @@ import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged 
 import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
-import { createRateLimitedBrandFetcher } from "../brand/fetcher";
+import { createRateLimitedDetailFetcher } from "../brand/fetcher";
+import type { ProductDetailResult } from "../brand/fetcher";
 import { getCachedBrand, setCachedBrand } from "../brand/cache";
 import { loadLearnedBrands, recordBrandLearning } from "../brand/learning";
 import { extractAllProducts, extractProduct, getProductCards, extractBrandCandidate } from "./extractor";
@@ -13,6 +14,7 @@ import { createDistributedFilters, updateDistributedStats, updateDistributedPref
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
+import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
 import { findDuplicates } from "./dedup";
@@ -20,7 +22,7 @@ import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
-import type { FilterState, Product } from "../types";
+import type { FilterState, Product, SellerInfo } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
 // CSS classes for product card visual states
@@ -31,6 +33,7 @@ const GLOBAL_STYLES = `
   .bas-trusted { border-left: 3px solid #067d62 !important; }
 ${REVIEW_BADGE_STYLES}
 ${REVIEW_INSIGHTS_STYLES}
+${PRICE_SPARKLINE_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -72,7 +75,7 @@ let isHaulMode = false;
 /** Whether filter widgets are distributed across the sidebar (vs. monolithic bar). */
 let isDistributedMode = false;
 const fetchReview = createRateLimitedFetcher(2, 500);
-const fetchBrand = createRateLimitedBrandFetcher(3, 500);
+const fetchDetails = createRateLimitedDetailFetcher(3, 500);
 /** Soft-navigation poll interval ID for cleanup. */
 let softNavIntervalId: ReturnType<typeof setInterval> | null = null;
 /** Soft-navigation DOM observer for cleanup. */
@@ -85,6 +88,8 @@ const productInsightsMap = new Map<string, ProductInsights>();
 const reviewDataMap = new Map<string, ProductReviewData>();
 /** Map ASIN → resolved brand name for products enriched via background fetch. */
 const brandMap = new Map<string, string>();
+/** Map ASIN → seller info for products enriched via background fetch. */
+const sellerMap = new Map<string, SellerInfo>();
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -287,6 +292,11 @@ async function filterAllProducts(): Promise<void> {
       product.brandCertain = true;
     }
 
+    // Attach cached seller info if available
+    if (product.asin && !product.seller && sellerMap.has(product.asin)) {
+      product.seller = sellerMap.get(product.asin)!;
+    }
+
     // Attach cached review quality if available
     if (product.asin && reviewScoreMap.has(product.asin)) {
       product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
@@ -343,6 +353,11 @@ async function filterAllProducts(): Promise<void> {
 
     // Inject per-card actions
     injectCardActions(product, () => refilterAll(currentFilters));
+
+    // Inject price history sparkline for visible products with ASINs
+    if (result !== "hide" && product.asin) {
+      injectPriceSparkline(product.element, product.asin);
+    }
   }
 
   // Update stats
@@ -357,8 +372,8 @@ async function filterAllProducts(): Promise<void> {
   // Queue review analysis for products with ASINs (non-blocking)
   queueReviewAnalysis(products);
 
-  // Queue brand enrichment for uncertain brands (non-blocking)
-  queueBrandEnrichment(products);
+  // Queue brand + seller enrichment for products with ASINs (non-blocking)
+  queueDetailEnrichment(products);
 }
 
 /**
@@ -639,55 +654,82 @@ function queueReviewAnalysis(products: Product[]): void {
 }
 
 /**
- * Asynchronously resolve brands for products where DOM/slug/title extraction
- * returned "Unknown". Fetches the product detail page and updates the card.
+ * Asynchronously resolve brands and seller info for products.
+ * Fetches the product detail page and extracts both brand and seller.
  * Respects the networkUsage setting — skips if "minimal".
  */
-function queueBrandEnrichment(products: Product[]): void {
+function queueDetailEnrichment(products: Product[]): void {
   if (resolveNetworkUsage(currentFilters.networkUsage) === "minimal") return;
 
   for (const product of products) {
-    if (!product.asin || product.brandCertain) continue;
+    if (!product.asin) continue;
     const asin = product.asin;
+    const needsBrand = !product.brandCertain;
+    const needsSeller = !product.seller;
 
-    // Already resolved this session
-    if (brandMap.has(asin)) {
+    // Skip if both already resolved
+    if (!needsBrand && !needsSeller) continue;
+
+    // Attach from session cache if available
+    if (needsBrand && brandMap.has(asin)) {
       product.brand = brandMap.get(asin)!;
       product.brandCertain = true;
       updateBrandDisplay(product);
-      continue;
     }
+    if (needsSeller && sellerMap.has(asin)) {
+      product.seller = sellerMap.get(asin)!;
+    }
+    if (product.brandCertain && product.seller) continue;
 
     // Async: check cache, then fetch if needed
     void (async () => {
       try {
-        // Try persistent cache first
-        let brand = await getCachedBrand(asin);
+        let brand: string | null = null;
+        let seller: SellerInfo | null = null;
 
-        if (!brand) {
-          // Fetch from product detail page
-          brand = await fetchBrand(asin);
-          if (brand) {
+        // Try brand cache first
+        if (!product.brandCertain) {
+          brand = await getCachedBrand(asin);
+        }
+
+        // If we still need brand or seller, fetch the detail page
+        if ((!brand && !product.brandCertain) || !product.seller) {
+          const details = await fetchDetails(asin);
+
+          if (!brand && details.brand) {
+            brand = details.brand;
             await setCachedBrand(asin, brand).catch(() => {});
 
-            // Record learning: compare fetched brand against slug/title candidate
+            // Record learning
             const candidate = extractBrandCandidate(product.element, product.title);
             await recordBrandLearning(candidate, brand).catch(() => {});
           }
+
+          seller = details.seller;
         }
+
+        let needsRefilter = false;
 
         if (brand) {
           brandMap.set(asin, brand);
           product.brand = brand;
           product.brandCertain = true;
           updateBrandDisplay(product);
+          needsRefilter = true;
+        }
 
-          // Re-apply filters since brand may affect brand-mode filtering
+        if (seller) {
+          sellerMap.set(asin, seller);
+          product.seller = seller;
+          needsRefilter = true;
+        }
+
+        if (needsRefilter) {
           const result = await applyFilters(product, currentFilters);
           applyFilterResult(product.element, result);
         }
       } catch (err) {
-        console.warn("[BAS] Brand enrichment error:", err);
+        console.warn("[BAS] Detail enrichment error:", err);
       }
     })();
   }

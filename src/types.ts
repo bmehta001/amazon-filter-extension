@@ -14,10 +14,26 @@ export interface Product {
   adjustedRating?: number;
   /** True if the brand was confidently extracted from DOM/slug/title. */
   brandCertain?: boolean;
+  /** Seller/fulfillment info, populated asynchronously from product detail page. */
+  seller?: SellerInfo;
 }
+
+/** Seller information extracted from a product detail page. */
+export interface SellerInfo {
+  /** Name of the seller ("Amazon.com", "Third Party Name", etc.) */
+  sellerName: string;
+  /** Fulfillment type. */
+  fulfillment: FulfillmentType;
+}
+
+/** How the product is fulfilled. */
+export type FulfillmentType = "amazon" | "fba" | "third-party" | "unknown";
 
 /** Brand filtering mode. */
 export type BrandMode = "off" | "dim" | "hide" | "trusted-only";
+
+/** Seller filter mode. */
+export type SellerFilter = "any" | "amazon" | "fba" | "third-party";
 
 /** Network usage mode for background data fetching. */
 export type NetworkUsage = "full" | "minimal" | "auto";
@@ -37,8 +53,9 @@ export interface FilterState {
   useMLAnalysis: boolean;
   ignoredCategories: string[];
   dedupCategories: string[];
-  totalPages: number;  // how many pages of results to show (1 = current page only, up to 10)
+  totalPages: number;
   networkUsage: NetworkUsage;
+  sellerFilter: SellerFilter;
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -68,6 +85,7 @@ export const DEFAULT_FILTERS: FilterState = {
   dedupCategories: [],
   totalPages: 1,
   networkUsage: "auto",
+  sellerFilter: "any",
 };
 
 /** Default storage data. */

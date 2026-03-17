@@ -92,8 +92,8 @@ describe("createDistributedFilters", () => {
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
     const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
-    // Expect: main + review + price = 3 widgets (brand is enhanced in-place)
-    expect(widgets.length).toBe(3);
+    // Expect: main + review + price + seller = 4 widgets (brand is enhanced in-place)
+    expect(widgets.length).toBe(4);
   });
 
   it("places review widget after Customer Review section", () => {
@@ -198,9 +198,9 @@ describe("createDistributedFilters", () => {
     const host = createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
 
     // All widgets should still be injected (fallback positions)
-    // main + review + price + brand fallback = 4 widgets
+    // main + review + price + brand fallback + seller = 5 widgets
     const widgets = sidebar.querySelectorAll(".bas-sidebar-widget-host");
-    expect(widgets.length).toBe(4);
+    expect(widgets.length).toBe(5);
     expect(host).toBeInstanceOf(HTMLElement);
   });
 
@@ -257,8 +257,8 @@ describe("cleanupDistributedFilters", () => {
     document.body.appendChild(sidebar);
 
     createDistributedFilters(DEFAULT_FILTERS, noopCallbacks, sidebar);
-    // main + review + price = 3 widgets (brand is enhanced in-place)
-    expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(3);
+    // main + review + price + seller = 4 widgets (brand is enhanced in-place)
+    expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(4);
 
     cleanupDistributedFilters();
     expect(sidebar.querySelectorAll(".bas-sidebar-widget-host").length).toBe(0);

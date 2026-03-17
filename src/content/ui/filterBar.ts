@@ -1,4 +1,4 @@
-import type { FilterState, BrandMode } from "../../types";
+import type { FilterState, BrandMode, SellerFilter } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 import filterBarStyles from "./filterBar.css?inline";
 import { REVIEW_CATEGORIES } from "../../review/categories";
@@ -146,6 +146,29 @@ export function createFilterBar(
   brandSelect.addEventListener("change", emitChange);
   brandGroup.appendChild(brandSelect);
   bar.appendChild(brandGroup);
+
+  bar.appendChild(sep());
+
+  // ── Seller Filter ─────────────────────────────────────────────────
+  const sellerGroup = group("Seller:");
+  sellerGroup.title = "Filter by seller/fulfillment type (data loaded from product pages)";
+  const sellerSelect = document.createElement("select");
+  const sellerOptions: [SellerFilter, string][] = [
+    ["any", "Any Seller"],
+    ["amazon", "Amazon Only"],
+    ["fba", "Amazon + FBA"],
+    ["third-party", "Third-Party"],
+  ];
+  for (const [val, label] of sellerOptions) {
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = label;
+    if (val === initialState.sellerFilter) opt.selected = true;
+    sellerSelect.appendChild(opt);
+  }
+  sellerSelect.addEventListener("change", emitChange);
+  sellerGroup.appendChild(sellerSelect);
+  bar.appendChild(sellerGroup);
 
   bar.appendChild(sep());
 
@@ -418,6 +441,7 @@ export function createFilterBar(
       excludeTokens: parseExcludeTokens(excludeTextarea.value),
       excludedBrands: [],
       brandMode: brandSelect.value as BrandMode,
+      sellerFilter: sellerSelect.value as SellerFilter,
       hideSponsored: sponsoredCb.checked,
       queryBuilder: qbCb.checked,
       minReviewQuality: parseInt(qualityInput.value, 10) || 0,
@@ -429,6 +453,7 @@ export function createFilterBar(
         .filter(([_, cb]) => cb.checked)
         .map(([id, _]) => id),
       totalPages: Math.min(10, Math.max(1, parseInt(pagesSelect.value, 10) || 1)),
+      networkUsage: "auto",
     };
     callbacks.onFilterChange(state);
   }

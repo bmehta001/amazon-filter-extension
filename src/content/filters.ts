@@ -55,6 +55,13 @@ export async function applyFilters(
   const brandResult = await applyBrandFilter(product, state.brandMode);
   if (brandResult !== "show") return brandResult;
 
+  // P5b: Seller filter (only applies when seller info is available)
+  if (state.sellerFilter !== "any" && product.seller) {
+    if (!matchesSellerFilter(product, state.sellerFilter)) {
+      return "hide";
+    }
+  }
+
   // P6: Review quality (only if score has been computed and threshold is set)
   if (
     state.minReviewQuality > 0 &&
@@ -96,6 +103,28 @@ function matchesExcludedBrands(product: Product, brands: string[]): boolean {
   const productBrand = product.brand?.toLowerCase();
   if (!productBrand) return false;
   return brands.some((b) => productBrand.includes(b.toLowerCase()));
+}
+
+/**
+ * Check if product seller info matches the selected seller filter.
+ */
+function matchesSellerFilter(
+  product: Product,
+  filter: FilterState["sellerFilter"],
+): boolean {
+  if (!product.seller) return true; // no info → don't filter
+  const f = product.seller.fulfillment;
+
+  switch (filter) {
+    case "amazon":
+      return f === "amazon";
+    case "fba":
+      return f === "amazon" || f === "fba";
+    case "third-party":
+      return f === "third-party";
+    default:
+      return true;
+  }
 }
 
 /**

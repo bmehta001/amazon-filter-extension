@@ -13,7 +13,7 @@
  * a closure-based state for synchronised filter changes.
  */
 
-import type { FilterState, BrandMode } from "../../types";
+import type { FilterState, BrandMode, SellerFilter } from "../../types";
 import { DEFAULT_FILTERS } from "../../types";
 import { REVIEW_CATEGORIES } from "../../review/categories";
 import { DEDUP_CATEGORIES } from "../dedup";
@@ -317,6 +317,33 @@ export function createDistributedFilters(
     injectedWidgets.push(brandWidget);
   }
 
+  // ── 5. Seller filter widget ───────────────────────────────────────
+  const sellerWidget = createWidget("🏪 Seller Filter", (container) => {
+    const sellerGroup = wGroup("Sold By:", "Filter by seller/fulfillment (loaded from product pages)");
+    refs.sellerSelect = document.createElement("select");
+    refs.sellerSelect.className = "bas-w-select";
+    const sellerOptions: [string, string][] = [
+      ["any", "Any Seller"],
+      ["amazon", "Amazon Only"],
+      ["fba", "Amazon + FBA"],
+      ["third-party", "Third-Party Only"],
+    ];
+    for (const [val, label] of sellerOptions) {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = label;
+      if (val === initialState.sellerFilter) opt.selected = true;
+      refs.sellerSelect.appendChild(opt);
+    }
+    refs.sellerSelect.addEventListener("change", emitChange);
+    sellerGroup.appendChild(refs.sellerSelect);
+    container.appendChild(sellerGroup);
+  });
+
+  // Place after brand section or at end of sidebar
+  injectAfterSection(enhancedBrandSection ?? null, sellerWidget, sidebar);
+  injectedWidgets.push(sellerWidget);
+
   return mainWidget;
 }
 
@@ -463,6 +490,7 @@ interface WidgetRefs {
   priceMax: HTMLInputElement;
   // Brand (integrated into Amazon's section)
   brandSelect: HTMLSelectElement;
+  sellerSelect: HTMLSelectElement;
   excludedBrands: Set<string>;
   excludeBrandsInput?: HTMLTextAreaElement; // fallback only
 }
@@ -487,6 +515,7 @@ function gatherState(refs: WidgetRefs, state: FilterState): void {
   state.priceMin = refs.priceMin?.value ? parseFloat(refs.priceMin.value) : null;
   state.priceMax = refs.priceMax?.value ? parseFloat(refs.priceMax.value) : null;
   state.brandMode = (refs.brandSelect?.value as BrandMode) ?? state.brandMode;
+  state.sellerFilter = (refs.sellerSelect?.value as SellerFilter) ?? state.sellerFilter;
 
   // Collect excluded brands from the integrated UI or fallback textarea
   const excluded: string[] = [];
