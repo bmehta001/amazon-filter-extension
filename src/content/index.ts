@@ -4,7 +4,8 @@ import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { createRateLimitedBrandFetcher } from "../brand/fetcher";
 import { getCachedBrand, setCachedBrand } from "../brand/cache";
-import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
+import { loadLearnedBrands, recordBrandLearning } from "../brand/learning";
+import { extractAllProducts, extractProduct, getProductCards, extractBrandCandidate } from "./extractor";
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats, updatePrefetchStatus } from "./ui/filterBar";
@@ -97,8 +98,8 @@ async function main(): Promise<void> {
   // Inject global styles
   injectGlobalStyles();
 
-  // Load saved filters and brand allowlist concurrently
-  const [filters] = await Promise.all([loadFilters(), initAllowlist()]);
+  // Load saved filters, brand allowlist, and learned brands concurrently
+  const [filters] = await Promise.all([loadFilters(), initAllowlist(), loadLearnedBrands()]);
   currentFilters = filters;
 
   // Apply sponsored top-slot hiding if enabled
@@ -668,6 +669,10 @@ function queueBrandEnrichment(products: Product[]): void {
           brand = await fetchBrand(asin);
           if (brand) {
             await setCachedBrand(asin, brand).catch(() => {});
+
+            // Record learning: compare fetched brand against slug/title candidate
+            const candidate = extractBrandCandidate(product.element, product.title);
+            await recordBrandLearning(candidate, brand).catch(() => {});
           }
         }
 

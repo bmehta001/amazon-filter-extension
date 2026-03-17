@@ -1,5 +1,6 @@
 import type { Product } from "../types";
 import { parseCount, parseRating, parsePrice, extractAsin } from "../util/parse";
+import { isLearnedBrand } from "../brand/learning";
 
 // ── Amazon DOM selectors (centralized for easy updates) ──────────────
 
@@ -172,15 +173,13 @@ const GENERIC_WORDS = new Set([
 
 /**
  * Check if a word looks like a brand name (not a generic descriptor).
- * Also checks any user-learned brand words stored from prior sessions.
+ * Also checks learned brand words from prior sessions.
  */
 export function isBrandWord(word: string): boolean {
-  return (
-    word.length >= 2 &&
-    word.length <= 30 &&
-    !GENERIC_WORDS.has(word.toLowerCase()) &&
-    /^[A-Z]/i.test(word)
-  );
+  if (word.length < 2 || word.length > 30 || !/^[A-Z]/i.test(word)) return false;
+  // Learned brands override the generic list
+  if (isLearnedBrand(word)) return true;
+  return !GENERIC_WORDS.has(word.toLowerCase());
 }
 
 /** Exported for testing and self-improvement system. */
@@ -284,6 +283,35 @@ function extractBrand(card: HTMLElement, title: string): string {
   }
 
   return "Unknown";
+}
+
+/**
+ * Extract the candidate brand word from URL slug or title that may have been
+ * rejected by the generic word filter. Used by the learning system to compare
+ * against the definitive brand from the product detail page.
+ */
+export function extractBrandCandidate(card: HTMLElement, title: string): string | null {
+  // Check URL slug
+  const productLink = card.querySelector<HTMLAnchorElement>('h2 a[href*="/dp/"]');
+  if (productLink) {
+    const slugMatch = productLink.getAttribute("href")?.match(/\/([^/]+)\/dp\//);
+    if (slugMatch) {
+      const firstWord = slugMatch[1].split("-")[0];
+      if (firstWord && firstWord.length >= 2 && /^[A-Z]/i.test(firstWord)) {
+        return firstWord;
+      }
+    }
+  }
+
+  // Check title first word
+  if (title) {
+    const firstWord = title.split(/[\s,\-]+/)[0];
+    if (firstWord && firstWord.length >= 2 && /^[A-Z]/.test(firstWord)) {
+      return firstWord;
+    }
+  }
+
+  return null;
 }
 
 function detectSponsored(card: HTMLElement): boolean {

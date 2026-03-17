@@ -45,7 +45,8 @@ vi.stubGlobal("chrome", mockChrome);
 
 import { extractBrandFromDocument } from "../src/brand/fetcher";
 import { getCachedBrand, setCachedBrand, clearBrandCache } from "../src/brand/cache";
-import { isBrandWord, GENERIC_WORDS } from "../src/content/extractor";
+import { isBrandWord, GENERIC_WORDS, extractBrandCandidate } from "../src/content/extractor";
+import { recordBrandLearning, getLearnedBrands, clearLearnedBrands, loadLearnedBrands, isLearnedBrand } from "../src/brand/learning";
 
 // ── Helper: create mock product detail page ──────────────────────────
 
@@ -260,5 +261,99 @@ describe("GENERIC_WORDS coverage", () => {
     expect(GENERIC_WORDS.has("baby")).toBe(true);
     expect(GENERIC_WORDS.has("toddler")).toBe(true);
     expect(GENERIC_WORDS.has("teen")).toBe(true);
+  });
+});
+
+describe("Brand learning", () => {
+  beforeEach(async () => {
+    storedData = {};
+    mockChrome.runtime.lastError = undefined;
+    await clearLearnedBrands();
+  });
+
+  it("learns a brand when detail page confirms slug/title word", async () => {
+    await recordBrandLearning("Baby", "Baby");
+    expect(isLearnedBrand("Baby")).toBe(true);
+    expect(getLearnedBrands().has("baby")).toBe(true);
+  });
+
+  it("does not learn when detail page returns different brand", async () => {
+    await recordBrandLearning("Wireless", "Sony");
+    expect(isLearnedBrand("Wireless")).toBe(false);
+  });
+
+  it("does nothing when candidate is null", async () => {
+    await recordBrandLearning(null, "Sony");
+    expect(getLearnedBrands().size).toBe(0);
+  });
+
+  it("persists learned brands to storage", async () => {
+    await recordBrandLearning("Monitor", "Monitor");
+    // Verify it's in storage
+    expect(storedData["bas_learned_brands"]).toEqual(["monitor"]);
+  });
+
+  it("loads learned brands from storage", async () => {
+    storedData["bas_learned_brands"] = ["baby", "monitor"];
+    await loadLearnedBrands();
+    expect(isLearnedBrand("Baby")).toBe(true);
+    expect(isLearnedBrand("Monitor")).toBe(true);
+  });
+
+  it("learned brands override GENERIC_WORDS in isBrandWord", async () => {
+    // "Baby" is in GENERIC_WORDS, so normally rejected
+    expect(isBrandWord("Baby")).toBe(false);
+
+    // Learn it as a brand
+    await recordBrandLearning("Baby", "Baby");
+
+    // Now it should be accepted
+    expect(isBrandWord("Baby")).toBe(true);
+  });
+
+  it("clears learned brands", async () => {
+    await recordBrandLearning("Test", "Test");
+    expect(isLearnedBrand("Test")).toBe(true);
+
+    await clearLearnedBrands();
+    expect(isLearnedBrand("Test")).toBe(false);
+    expect(getLearnedBrands().size).toBe(0);
+  });
+});
+
+describe("extractBrandCandidate", () => {
+  function createCard(opts: { urlSlug?: string; title?: string }): HTMLElement {
+    const card = document.createElement("div");
+    const h2 = document.createElement("h2");
+    const link = document.createElement("a");
+    link.className = "a-link-normal";
+
+    if (opts.urlSlug) {
+      link.href = `/${opts.urlSlug}/dp/B000000000/ref=sr_1_1`;
+    } else {
+      link.href = "/dp/B000000000";
+    }
+
+    const span = document.createElement("span");
+    span.textContent = opts.title || "Test Product";
+    link.appendChild(span);
+    h2.appendChild(link);
+    card.appendChild(h2);
+    return card;
+  }
+
+  it("extracts candidate from URL slug", () => {
+    const card = createCard({ urlSlug: "Baby-Jogger-City-Mini" });
+    expect(extractBrandCandidate(card, "City Mini Stroller")).toBe("Baby");
+  });
+
+  it("extracts candidate from title when no slug", () => {
+    const card = createCard({ title: "Monitor Audio Bronze 50" });
+    expect(extractBrandCandidate(card, "Monitor Audio Bronze 50")).toBe("Monitor");
+  });
+
+  it("returns null when no candidate available", () => {
+    const card = createCard({ title: "test product" }); // lowercase, no /dp/ slug
+    expect(extractBrandCandidate(card, "test product")).toBeNull();
   });
 });
