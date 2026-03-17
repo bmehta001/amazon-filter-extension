@@ -1,4 +1,4 @@
-import type { StorageData, FilterState } from "../types";
+import type { StorageData, FilterState, GlobalPreferences } from "../types";
 import { DEFAULT_STORAGE } from "../types";
 import { debounce } from "./debounce";
 
@@ -146,6 +146,34 @@ export function onFiltersChanged(
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "sync" && changes.filters) {
       debouncedCallback(changes.filters.newValue as FilterState);
+    }
+  });
+}
+
+/** Load just the global preferences. */
+export async function loadPreferences(): Promise<GlobalPreferences> {
+  const data = await loadStorage();
+  return data.preferences;
+}
+
+/** Save global preferences. */
+export async function savePreferences(prefs: GlobalPreferences): Promise<void> {
+  await saveStorage({ preferences: prefs });
+}
+
+/**
+ * Listen for preference changes from the popup or other tabs.
+ */
+export function onPreferencesChanged(
+  callback: (prefs: GlobalPreferences) => void,
+): void {
+  const debouncedCallback = debounce((prefs: GlobalPreferences) => {
+    callback(prefs);
+  }, 100);
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "sync" && changes.preferences) {
+      debouncedCallback(changes.preferences.newValue as GlobalPreferences);
     }
   });
 }

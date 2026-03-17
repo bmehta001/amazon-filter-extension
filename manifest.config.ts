@@ -65,6 +65,7 @@ export default defineManifest({
       "128": "public/icons/icon128.png",
     },
     default_title: "Better Amazon Search",
+    default_popup: "src/popup/popup.html",
   },
   // Firefox (Gecko) support — requires Firefox 121+ for MV3 service workers
   browser_specific_settings: {

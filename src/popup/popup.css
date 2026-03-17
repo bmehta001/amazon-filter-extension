@@ -1,0 +1,219 @@
+/* Better Amazon Search — Popup Styles */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Amazon Ember", "Segoe UI", -apple-system, sans-serif;
+  font-size: 13px;
+  color: #0f1111;
+  background: #f7f8fa;
+  min-width: 320px;
+  max-width: 320px;
+}
+
+.popup {
+  padding: 0;
+}
+
+/* Header */
+.popup-header {
+  background: linear-gradient(135deg, #232f3e 0%, #37475a 100%);
+  color: #fff;
+  padding: 14px 16px 12px;
+  text-align: center;
+}
+
+.popup-header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.popup-subtitle {
+  font-size: 11px;
+  color: #a2b0c3;
+  margin-top: 2px;
+}
+
+/* Sections */
+.section {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e7e8ea;
+}
+
+.section:last-of-type {
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #565959;
+  margin-bottom: 4px;
+}
+
+.section-desc {
+  font-size: 11px;
+  color: #888c8c;
+  margin-bottom: 10px;
+}
+
+/* Bandwidth Preset Buttons */
+.preset-group {
+  display: flex;
+  gap: 6px;
+}
+
+.preset-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 2px solid #d5d9d9;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.preset-btn:hover {
+  border-color: #007185;
+  background: #f0f8fa;
+}
+
+.preset-btn.active {
+  border-color: #007185;
+  background: #e7f4f7;
+  box-shadow: 0 0 0 1px #007185;
+}
+
+.preset-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.preset-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f1111;
+}
+
+/* Toggle Rows */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-row + .toggle-row,
+.toggle-row + .select-row,
+.select-row + .toggle-row,
+.select-row + .select-row {
+  border-top: 1px solid #f0f0f0;
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: #0f1111;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toggle-icon {
+  font-size: 14px;
+}
+
+/* Custom Toggle Switch */
+.toggle-input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #ccc;
+  border-radius: 10px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle-slider::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-input:checked + .toggle-slider {
+  background: #007185;
+}
+
+.toggle-input:checked + .toggle-slider::after {
+  transform: translateX(16px);
+}
+
+/* Select Rows */
+.select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.select-label {
+  font-size: 13px;
+  color: #0f1111;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.select-input {
+  padding: 4px 8px;
+  border: 1px solid #d5d9d9;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #0f1111;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: #007185;
+  box-shadow: 0 0 0 2px rgba(0, 113, 133, 0.2);
+}
+
+/* Footer */
+.popup-footer {
+  padding: 8px 16px;
+  text-align: center;
+  min-height: 28px;
+}
+
+.save-status {
+  font-size: 11px;
+  color: #067d62;
+  transition: opacity 0.3s;
+}

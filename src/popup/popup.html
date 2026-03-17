@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Better Amazon Search</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <h1>🔍 Better Amazon Search</h1>
+      <p class="popup-subtitle">Extension Settings</p>
+    </header>
+
+    <!-- Bandwidth Mode Quick Toggle -->
+    <section class="section">
+      <h2 class="section-title">⚡ Bandwidth Mode</h2>
+      <p class="section-desc">One click to adjust all data-fetching features</p>
+      <div class="preset-group" id="preset-group">
+        <button class="preset-btn" data-preset="low" title="Minimal data usage — disables sparklines, review badges, and detail preloading">
+          <span class="preset-icon">🔋</span>
+          <span class="preset-label">Low</span>
+        </button>
+        <button class="preset-btn" data-preset="balanced" title="Sensible defaults — sparklines and badges on, ML off">
+          <span class="preset-icon">⚖️</span>
+          <span class="preset-label">Balanced</span>
+        </button>
+        <button class="preset-btn" data-preset="high" title="All features enabled including ML analysis">
+          <span class="preset-icon">🚀</span>
+          <span class="preset-label">High</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Data Features -->
+    <section class="section">
+      <h2 class="section-title">📊 Data Features</h2>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">📈</span> Price History Sparklines
+        </span>
+        <input type="checkbox" id="pref-sparklines" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">🛡️</span> Review Trust Badges
+        </span>
+        <input type="checkbox" id="pref-review-badges" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">🏷️</span> Pre-load Product Details
+        </span>
+        <input type="checkbox" id="pref-preload" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">🤖</span> ML Review Analysis
+        </span>
+        <input type="checkbox" id="pref-ml" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+    </section>
+
+    <!-- Default Filters -->
+    <section class="section">
+      <h2 class="section-title">🎯 Default Filters</h2>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">🚫</span> Hide Sponsored
+        </span>
+        <input type="checkbox" id="pref-hide-sponsored" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <div class="select-row">
+        <span class="select-label">
+          <span class="toggle-icon">🏷️</span> Brand Mode
+        </span>
+        <select id="pref-brand-mode" class="select-input">
+          <option value="off">Off</option>
+          <option value="dim">Dim Unknown</option>
+          <option value="hide">Hide Unknown</option>
+          <option value="trusted-only">Trusted Only</option>
+        </select>
+      </div>
+      <div class="select-row">
+        <span class="select-label">
+          <span class="toggle-icon">🏪</span> Seller Filter
+        </span>
+        <select id="pref-seller-filter" class="select-input">
+          <option value="any">Any Seller</option>
+          <option value="amazon">Amazon Only</option>
+          <option value="fba">Fulfilled by Amazon</option>
+          <option value="third-party">Third-Party</option>
+        </select>
+      </div>
+    </section>
+
+    <footer class="popup-footer">
+      <span class="save-status" id="save-status"></span>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.ts"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged } from "../util/storage";
+import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged, loadPreferences, onPreferencesChanged } from "../util/storage";
 import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
@@ -22,7 +22,8 @@ import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
-import type { FilterState, Product, SellerInfo } from "../types";
+import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
+import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
 // CSS classes for product card visual states
@@ -90,6 +91,8 @@ const reviewDataMap = new Map<string, ProductReviewData>();
 const brandMap = new Map<string, string>();
 /** Map ASIN → seller info for products enriched via background fetch. */
 const sellerMap = new Map<string, SellerInfo>();
+/** Global preferences loaded from popup settings. */
+let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -103,9 +106,31 @@ async function main(): Promise<void> {
   // Inject global styles
   injectGlobalStyles();
 
-  // Load saved filters, brand allowlist, and learned brands concurrently
-  const [filters] = await Promise.all([loadFilters(), initAllowlist(), loadLearnedBrands()]);
+  // Load saved filters, preferences, brand allowlist, and learned brands concurrently
+  const [filters, prefs] = await Promise.all([loadFilters(), loadPreferences(), initAllowlist(), loadLearnedBrands()]);
   currentFilters = filters;
+  currentPrefs = prefs;
+
+  // Apply preference defaults to filters for new sessions
+  if (currentPrefs.hideSponsoredDefault && !currentFilters.hideSponsored) {
+    currentFilters.hideSponsored = true;
+  }
+  if (currentPrefs.defaultBrandMode !== "off" && currentFilters.brandMode === "off") {
+    currentFilters.brandMode = currentPrefs.defaultBrandMode;
+  }
+  if (currentPrefs.defaultSellerFilter !== "any" && currentFilters.sellerFilter === "any") {
+    currentFilters.sellerFilter = currentPrefs.defaultSellerFilter;
+  }
+  if (currentPrefs.useMLAnalysis !== currentFilters.useMLAnalysis) {
+    currentFilters.useMLAnalysis = currentPrefs.useMLAnalysis;
+  }
+
+  // Listen for preference changes from popup
+  onPreferencesChanged((prefs) => {
+    currentPrefs = prefs;
+    // Re-filter to apply feature toggle changes (e.g., sparklines, badges)
+    void filterAllProducts();
+  });
 
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredVisibility(currentFilters.hideSponsored);
@@ -355,7 +380,7 @@ async function filterAllProducts(): Promise<void> {
     injectCardActions(product, () => refilterAll(currentFilters));
 
     // Inject price history sparkline for visible products with ASINs
-    if (result !== "hide" && product.asin) {
+    if (currentPrefs.showSparklines && result !== "hide" && product.asin) {
       injectPriceSparkline(product.element, product.asin);
     }
   }
@@ -370,10 +395,14 @@ async function filterAllProducts(): Promise<void> {
   }
 
   // Queue review analysis for products with ASINs (non-blocking)
-  queueReviewAnalysis(products);
+  if (currentPrefs.showReviewBadges) {
+    queueReviewAnalysis(products);
+  }
 
   // Queue brand + seller enrichment for products with ASINs (non-blocking)
-  queueDetailEnrichment(products);
+  if (currentPrefs.preloadDetails) {
+    queueDetailEnrichment(products);
+  }
 }
 
 /**
