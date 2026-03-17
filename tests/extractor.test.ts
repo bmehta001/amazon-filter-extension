@@ -20,6 +20,7 @@ function createMockCard(opts: {
   sponsored?: boolean;
   sponsoredType?: "classic" | "ads-metrics" | "sp-sponsored" | "data-attr" | "aria-label" | "ad-holder";
   asin?: string;
+  urlSlug?: string;
 } = {}): HTMLElement {
   const card = document.createElement("div");
   card.setAttribute("data-component-type", "s-search-result");
@@ -29,7 +30,13 @@ function createMockCard(opts: {
   const h2 = document.createElement("h2");
   const link = document.createElement("a");
   link.className = "a-link-normal";
-  link.href = opts.asin ? `/dp/${opts.asin}` : "/dp/B000000000";
+  const asin = opts.asin || "B000000000";
+  // Use URL slug if provided, otherwise simple /dp/ASIN path
+  if (opts.urlSlug) {
+    link.href = `/${opts.urlSlug}/dp/${asin}/ref=sr_1_1`;
+  } else {
+    link.href = `/dp/${asin}`;
+  }
   const span = document.createElement("span");
   span.textContent = opts.title || "Test Product";
   link.appendChild(span);
@@ -173,6 +180,63 @@ describe("extractProduct", () => {
     const card = createMockCard({ title: "Wireless Headphones Pro" });
     const product = extractProduct(card);
     expect(product.brand).toBe("Unknown");
+  });
+
+  // ── URL slug brand extraction (Strategy 6) ──
+
+  it("extracts brand from URL slug", () => {
+    const card = createMockCard({
+      title: "Noise Cancelling Headphones",
+      urlSlug: "Soundcore-Cancelling-Headphones-Bluetooth-Comfortable",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Soundcore");
+  });
+
+  it("extracts brand from URL slug with known brand", () => {
+    const card = createMockCard({
+      title: "WF-1000XM5 Earbuds",
+      urlSlug: "Sony-WF-1000XM5-Cancelling-Truly",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Sony");
+  });
+
+  it("skips generic URL slug word and falls through to title", () => {
+    const card = createMockCard({
+      title: "Bose QuietComfort Earbuds",
+      urlSlug: "Bluetooth-Wireless-Earbuds-Headphones",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Bose");
+  });
+
+  it("extracts brand from slug when title starts with generic word", () => {
+    const card = createMockCard({
+      title: "Wireless Noise Cancelling Over Ear Headphones",
+      urlSlug: "MMWOWARTS-Cancelling-Headphones-Bluetooth-Lightweight",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("MMWOWARTS");
+  });
+
+  it("falls through slug for sponsored /sspa/ links to title", () => {
+    // Sponsored cards have /sspa/click links, no slug — simulate no slug
+    const card = createMockCard({
+      title: "JBL Tune 510BT Headphones",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("JBL");
+  });
+
+  it("prefers DOM brand over URL slug", () => {
+    const card = createMockCard({
+      brand: "Anker",
+      title: "Soundcore Life Q20i Headphones",
+      urlSlug: "Soundcore-Anker-Life-Q20i-Headphones",
+    });
+    const product = extractProduct(card);
+    expect(product.brand).toBe("Anker");
   });
 
   it("detects sponsored products (classic)", () => {

@@ -12,10 +12,15 @@ export interface Product {
   reviewQuality?: number;
   /** Rating recalculated after excluding ignored review categories. */
   adjustedRating?: number;
+  /** True if the brand was confidently extracted from DOM/slug/title. */
+  brandCertain?: boolean;
 }
 
 /** Brand filtering mode. */
 export type BrandMode = "off" | "dim" | "hide" | "trusted-only";
+
+/** Network usage mode for background data fetching. */
+export type NetworkUsage = "full" | "minimal" | "auto";
 
 /** Current state of all user-configurable filters. */
 export interface FilterState {
@@ -33,6 +38,7 @@ export interface FilterState {
   ignoredCategories: string[];
   dedupCategories: string[];
   totalPages: number;  // how many pages of results to show (1 = current page only, up to 10)
+  networkUsage: NetworkUsage;
 }
 
 /** Shape of data stored in chrome.storage.sync. */
@@ -61,6 +67,7 @@ export const DEFAULT_FILTERS: FilterState = {
   ignoredCategories: [],
   dedupCategories: [],
   totalPages: 1,
+  networkUsage: "auto",
 };
 
 /** Default storage data. */

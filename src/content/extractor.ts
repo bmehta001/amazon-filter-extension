@@ -47,6 +47,7 @@ export function extractProduct(card: HTMLElement): Product {
     brand,
     isSponsored,
     asin,
+    brandCertain: brand !== "Unknown",
   };
 }
 
@@ -119,6 +120,71 @@ function extractPrice(card: HTMLElement): number | null {
   }
   return null;
 }
+
+// ── Generic words that are NOT brand names (shared by slug + title extraction) ──
+// Comprehensive list — if slug/title hits a generic word, the async brand fetcher
+// will look up the real brand from the product detail page.
+const GENERIC_WORDS = new Set([
+  // Articles, prepositions, conjunctions
+  "the", "a", "an", "for", "with", "and", "in", "on", "to", "of", "by",
+
+  // Common adjectives / descriptors
+  "wireless", "bluetooth", "true", "sports", "premium", "professional",
+  "portable", "mini", "ultra", "super", "new", "upgraded", "original",
+  "genuine", "official", "authentic", "classic", "advanced", "smart",
+  "digital", "electric", "automatic", "universal", "adjustable",
+  "waterproof", "rechargeable", "foldable", "lightweight", "compact",
+  "heavy", "duty", "high", "quality", "best", "top", "pro", "max",
+  "industrial", "commercial", "organic", "natural", "ergonomic",
+  "magnetic", "solar", "thermal", "acoustic", "optical",
+  "durable", "flexible", "silicone", "stainless", "steel", "cotton",
+  "noise", "cancelling", "canceling", "active",
+
+  // Quantifiers and sizes
+  "pack", "set", "pair", "piece", "pcs", "count", "size", "large",
+  "small", "medium", "extra", "xl", "xxl", "xxxl",
+
+  // Demographics
+  "baby", "kids", "men", "women", "adult", "toddler", "infant",
+  "boys", "girls", "unisex", "teen",
+
+  // Product category nouns (common slug/title starters that aren't brands)
+  "washcloths", "headphones", "earbuds", "headset", "speaker", "charger",
+  "stroller", "monitor", "camera", "phone", "tablet", "laptop", "mouse",
+  "keyboard", "cable", "adapter", "case", "cover", "stand", "holder",
+  "bottle", "blanket", "pillow", "mattress", "towel", "socks", "shoes",
+  "boots", "sneakers", "sandals", "slippers", "jacket", "shirt", "pants",
+  "dress", "skirt", "sweater", "hoodie", "hat", "cap", "gloves", "scarf",
+  "backpack", "bag", "purse", "wallet", "belt", "watch", "ring",
+  "necklace", "bracelet", "earrings", "sunglasses", "glasses",
+  "squeaky", "chew", "plush", "interactive", "treat",
+  "drawer", "shelf", "rack", "bin", "basket", "organizer", "container",
+  "lamp", "light", "bulb", "fan", "heater", "filter", "pump", "valve",
+  "tool", "wrench", "drill", "saw", "hammer", "screwdriver",
+
+  // Colors (common slug starters)
+  "black", "white", "red", "blue", "green", "pink", "purple", "grey",
+  "gray", "brown", "gold", "silver", "clear", "multicolor",
+
+  // Numbers and years
+  "2024", "2025", "2026", "2027",
+]);
+
+/**
+ * Check if a word looks like a brand name (not a generic descriptor).
+ * Also checks any user-learned brand words stored from prior sessions.
+ */
+export function isBrandWord(word: string): boolean {
+  return (
+    word.length >= 2 &&
+    word.length <= 30 &&
+    !GENERIC_WORDS.has(word.toLowerCase()) &&
+    /^[A-Z]/i.test(word)
+  );
+}
+
+/** Exported for testing and self-improvement system. */
+export { GENERIC_WORDS };
 
 function extractBrand(card: HTMLElement, title: string): string {
   // Strategy 1: Dedicated brand row — a link or span directly under the title.
@@ -195,28 +261,24 @@ function extractBrand(card: HTMLElement, title: string): string {
     if (label && label.length > 0 && label.length < 60) return label;
   }
 
-  // Strategy 6: Extract brand from the product title (first word heuristic).
+  // Strategy 6: URL slug extraction.
+  // Amazon product URLs follow /Brand-Product-Words/dp/ASIN/ — first word is the brand.
+  const productLink = card.querySelector<HTMLAnchorElement>('h2 a[href*="/dp/"]');
+  if (productLink) {
+    const slugMatch = productLink.getAttribute("href")?.match(/\/([^/]+)\/dp\//);
+    if (slugMatch) {
+      const firstWord = slugMatch[1].split("-")[0];
+      if (isBrandWord(firstWord)) {
+        return firstWord;
+      }
+    }
+  }
+
+  // Strategy 7: Extract brand from the product title (first word heuristic).
   // Amazon often puts the brand as the first word(s) of the title.
-  // Skip common generic/descriptive words that aren't brands.
   if (title) {
-    const genericStarters = new Set([
-      "wireless", "bluetooth", "true", "sports", "premium", "professional",
-      "portable", "mini", "ultra", "super", "new", "upgraded", "original",
-      "genuine", "official", "authentic", "classic", "advanced", "smart",
-      "digital", "electric", "automatic", "universal", "adjustable",
-      "waterproof", "rechargeable", "foldable", "lightweight", "compact",
-      "heavy", "duty", "high", "quality", "best", "top", "pro", "max",
-      "the", "a", "an", "for", "with", "and", "in", "on", "to", "of",
-      "2024", "2025", "2026",
-    ]);
     const firstWord = title.split(/[\s,\-]+/)[0];
-    if (
-      firstWord &&
-      firstWord.length >= 2 &&
-      firstWord.length <= 30 &&
-      !genericStarters.has(firstWord.toLowerCase()) &&
-      /^[A-Z]/.test(firstWord)
-    ) {
+    if (firstWord && isBrandWord(firstWord) && /^[A-Z]/.test(firstWord)) {
       return firstWord;
     }
   }

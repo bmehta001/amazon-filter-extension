@@ -1,6 +1,9 @@
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged } from "../util/storage";
 import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl } from "../util/url";
+import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
+import { createRateLimitedBrandFetcher } from "../brand/fetcher";
+import { getCachedBrand, setCachedBrand } from "../brand/cache";
 import { extractAllProducts, extractProduct, getProductCards } from "./extractor";
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
@@ -68,6 +71,7 @@ let isHaulMode = false;
 /** Whether filter widgets are distributed across the sidebar (vs. monolithic bar). */
 let isDistributedMode = false;
 const fetchReview = createRateLimitedFetcher(2, 500);
+const fetchBrand = createRateLimitedBrandFetcher(3, 500);
 /** Soft-navigation poll interval ID for cleanup. */
 let softNavIntervalId: ReturnType<typeof setInterval> | null = null;
 /** Soft-navigation DOM observer for cleanup. */
@@ -78,6 +82,8 @@ const reviewScoreMap = new Map<string, ReviewScore>();
 const productInsightsMap = new Map<string, ProductInsights>();
 /** Map ASIN → raw review data for recomputing insights when categories change. */
 const reviewDataMap = new Map<string, ProductReviewData>();
+/** Map ASIN → resolved brand name for products enriched via background fetch. */
+const brandMap = new Map<string, string>();
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -274,6 +280,12 @@ async function filterAllProducts(): Promise<void> {
   // First pass: apply individual filters
   const filterResults: ("show" | "hide" | "dim")[] = [];
   for (const product of products) {
+    // Attach cached brand if the extractor couldn't determine one
+    if (product.asin && !product.brandCertain && brandMap.has(product.asin)) {
+      product.brand = brandMap.get(product.asin)!;
+      product.brandCertain = true;
+    }
+
     // Attach cached review quality if available
     if (product.asin && reviewScoreMap.has(product.asin)) {
       product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
@@ -343,6 +355,9 @@ async function filterAllProducts(): Promise<void> {
 
   // Queue review analysis for products with ASINs (non-blocking)
   queueReviewAnalysis(products);
+
+  // Queue brand enrichment for uncertain brands (non-blocking)
+  queueBrandEnrichment(products);
 }
 
 /**
@@ -619,6 +634,68 @@ function queueReviewAnalysis(products: Product[]): void {
         console.warn("[BAS] Review analysis error:", err);
       }
     })();
+  }
+}
+
+/**
+ * Asynchronously resolve brands for products where DOM/slug/title extraction
+ * returned "Unknown". Fetches the product detail page and updates the card.
+ * Respects the networkUsage setting — skips if "minimal".
+ */
+function queueBrandEnrichment(products: Product[]): void {
+  if (resolveNetworkUsage(currentFilters.networkUsage) === "minimal") return;
+
+  for (const product of products) {
+    if (!product.asin || product.brandCertain) continue;
+    const asin = product.asin;
+
+    // Already resolved this session
+    if (brandMap.has(asin)) {
+      product.brand = brandMap.get(asin)!;
+      product.brandCertain = true;
+      updateBrandDisplay(product);
+      continue;
+    }
+
+    // Async: check cache, then fetch if needed
+    void (async () => {
+      try {
+        // Try persistent cache first
+        let brand = await getCachedBrand(asin);
+
+        if (!brand) {
+          // Fetch from product detail page
+          brand = await fetchBrand(asin);
+          if (brand) {
+            await setCachedBrand(asin, brand).catch(() => {});
+          }
+        }
+
+        if (brand) {
+          brandMap.set(asin, brand);
+          product.brand = brand;
+          product.brandCertain = true;
+          updateBrandDisplay(product);
+
+          // Re-apply filters since brand may affect brand-mode filtering
+          const result = await applyFilters(product, currentFilters);
+          applyFilterResult(product.element, result);
+        }
+      } catch (err) {
+        console.warn("[BAS] Brand enrichment error:", err);
+      }
+    })();
+  }
+}
+
+/**
+ * Update the brand text shown on a product card after async resolution.
+ */
+function updateBrandDisplay(product: Product): void {
+  // Update the card actions brand labels if present
+  const brandLabel = product.element.querySelector(".bas-brand-label");
+  if (brandLabel) {
+    brandLabel.textContent = product.brand;
   }
 }
 
