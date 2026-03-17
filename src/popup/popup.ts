@@ -1,4 +1,6 @@
 import { loadPreferences, savePreferences } from "../util/storage";
+import { loadWatchlist, removeFromWatchlist } from "../watchlist/storage";
+import type { WatchlistItem } from "../watchlist/storage";
 import type { GlobalPreferences, BandwidthPreset, BrandMode, SellerFilter } from "../types";
 import { DEFAULT_PREFERENCES, applyBandwidthPreset } from "../types";
 
@@ -7,6 +9,7 @@ interface PopupElements {
   presetBtns: NodeListOf<HTMLButtonElement>;
   sparklines: HTMLInputElement;
   reviewBadges: HTMLInputElement;
+  dealBadges: HTMLInputElement;
   preload: HTMLInputElement;
   ml: HTMLInputElement;
   hideSponsored: HTMLInputElement;
@@ -23,6 +26,7 @@ function getElements(): PopupElements {
     presetBtns: document.querySelectorAll<HTMLButtonElement>(".preset-btn"),
     sparklines: document.getElementById("pref-sparklines") as HTMLInputElement,
     reviewBadges: document.getElementById("pref-review-badges") as HTMLInputElement,
+    dealBadges: document.getElementById("pref-deal-badges") as HTMLInputElement,
     preload: document.getElementById("pref-preload") as HTMLInputElement,
     ml: document.getElementById("pref-ml") as HTMLInputElement,
     hideSponsored: document.getElementById("pref-hide-sponsored") as HTMLInputElement,
@@ -42,6 +46,7 @@ function renderPrefs(els: PopupElements, prefs: GlobalPreferences): void {
   // Toggles
   els.sparklines.checked = prefs.showSparklines;
   els.reviewBadges.checked = prefs.showReviewBadges;
+  els.dealBadges.checked = prefs.showDealBadges;
   els.preload.checked = prefs.preloadDetails;
   els.ml.checked = prefs.useMLAnalysis;
   els.hideSponsored.checked = prefs.hideSponsoredDefault;
@@ -57,6 +62,7 @@ function gatherPrefs(els: PopupElements): GlobalPreferences {
     bandwidthMode: currentPrefs.bandwidthMode,
     showSparklines: els.sparklines.checked,
     showReviewBadges: els.reviewBadges.checked,
+    showDealBadges: els.dealBadges.checked,
     preloadDetails: els.preload.checked,
     useMLAnalysis: els.ml.checked,
     hideSponsoredDefault: els.hideSponsored.checked,
@@ -82,6 +88,7 @@ function inferBandwidthPreset(prefs: GlobalPreferences): BandwidthPreset {
   if (
     prefs.showSparklines &&
     prefs.showReviewBadges &&
+    prefs.showDealBadges &&
     prefs.preloadDetails &&
     prefs.useMLAnalysis
   ) {
@@ -90,6 +97,7 @@ function inferBandwidthPreset(prefs: GlobalPreferences): BandwidthPreset {
   if (
     !prefs.showSparklines &&
     !prefs.showReviewBadges &&
+    !prefs.showDealBadges &&
     !prefs.preloadDetails &&
     !prefs.useMLAnalysis
   ) {
@@ -98,6 +106,7 @@ function inferBandwidthPreset(prefs: GlobalPreferences): BandwidthPreset {
   if (
     prefs.showSparklines &&
     prefs.showReviewBadges &&
+    prefs.showDealBadges &&
     prefs.preloadDetails &&
     !prefs.useMLAnalysis
   ) {
@@ -133,11 +142,77 @@ async function init(): Promise<void> {
 
   els.sparklines.addEventListener("change", onToggleChange);
   els.reviewBadges.addEventListener("change", onToggleChange);
+  els.dealBadges.addEventListener("change", onToggleChange);
   els.preload.addEventListener("change", onToggleChange);
   els.ml.addEventListener("change", onToggleChange);
   els.hideSponsored.addEventListener("change", onToggleChange);
   els.brandMode.addEventListener("change", onToggleChange);
   els.sellerFilter.addEventListener("change", onToggleChange);
+
+  // Render watchlist
+  await renderWatchlist();
+}
+
+async function renderWatchlist(): Promise<void> {
+  const container = document.getElementById("watchlist-items")!;
+  const emptyMsg = document.getElementById("watchlist-empty")!;
+  const items = await loadWatchlist();
+
+  if (items.length === 0) {
+    emptyMsg.style.display = "block";
+    container.innerHTML = "";
+    return;
+  }
+
+  emptyMsg.style.display = "none";
+  container.innerHTML = "";
+
+  for (const item of items) {
+    container.appendChild(createWatchlistItemEl(item));
+  }
+}
+
+function createWatchlistItemEl(item: WatchlistItem): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "watchlist-item";
+
+  const info = document.createElement("div");
+  info.className = "watchlist-info";
+
+  const title = document.createElement("div");
+  title.className = "watchlist-title";
+  title.textContent = item.title;
+
+  const prices = document.createElement("div");
+  prices.className = "watchlist-prices";
+  const diff = item.lastKnownPrice - item.priceWhenAdded;
+  const diffClass = diff < 0 ? "price-drop" : diff > 0 ? "price-up" : "";
+  const diffText =
+    diff < 0
+      ? ` (↓ $${Math.abs(diff).toFixed(2)})`
+      : diff > 0
+        ? ` (↑ $${diff.toFixed(2)})`
+        : "";
+  prices.innerHTML =
+    `Now: <strong>$${item.lastKnownPrice.toFixed(2)}</strong>` +
+    (diffText ? ` <span class="${diffClass}">${diffText}</span>` : "") +
+    ` · Target: $${item.targetPrice.toFixed(2)}`;
+
+  info.appendChild(title);
+  info.appendChild(prices);
+
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "watchlist-remove";
+  removeBtn.textContent = "✕";
+  removeBtn.title = "Remove from watchlist";
+  removeBtn.addEventListener("click", async () => {
+    await removeFromWatchlist(item.asin);
+    await renderWatchlist();
+  });
+
+  row.appendChild(info);
+  row.appendChild(removeBtn);
+  return row;
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -1,4 +1,4 @@
-import type { Product } from "../types";
+import type { Product, CouponInfo } from "../types";
 import { parseCount, parseRating, parsePrice, extractAsin } from "../util/parse";
 import { isLearnedBrand } from "../brand/learning";
 
@@ -38,6 +38,9 @@ export function extractProduct(card: HTMLElement): Product {
   const brand = extractBrand(card, title);
   const isSponsored = detectSponsored(card);
   const asin = card.dataset.asin || extractAsinFromLinks(card);
+  const listPrice = extractListPrice(card);
+  const coupon = extractCoupon(card);
+  const hasDealBadge = extractDealBadge(card);
 
   return {
     element: card,
@@ -49,6 +52,9 @@ export function extractProduct(card: HTMLElement): Product {
     isSponsored,
     asin,
     brandCertain: brand !== "Unknown",
+    listPrice: listPrice ?? undefined,
+    coupon: coupon ?? undefined,
+    hasDealBadge,
   };
 }
 
@@ -362,4 +368,83 @@ function extractAsinFromLinks(card: HTMLElement): string | null {
     return extractAsin(link.href);
   }
   return null;
+}
+
+// ── Deal Signal Extraction ──────────────────────────────────────────
+
+/**
+ * Extract the original "List" price (strikethrough price) from a product card.
+ * Amazon shows this as crossed-out text when the current price is discounted.
+ */
+export function extractListPrice(card: HTMLElement): number | null {
+  // Strategy 1: [data-strikethroughprice] .a-text-strike
+  const strikeEl = card.querySelector("[data-strikethroughprice] .a-text-strike");
+  if (strikeEl?.textContent) {
+    return parsePrice(strikeEl.textContent);
+  }
+
+  // Strategy 2: span.a-text-price (the "was" price container)
+  const textPrice = card.querySelector("span.a-text-price:not(.a-size-mini) span.a-offscreen");
+  if (textPrice?.textContent) {
+    return parsePrice(textPrice.textContent);
+  }
+
+  // Strategy 3: "List:" label followed by strikethrough
+  const listLabel = card.querySelector("span.a-text-strike");
+  if (listLabel?.textContent) {
+    return parsePrice(listLabel.textContent);
+  }
+
+  return null;
+}
+
+/**
+ * Extract coupon info from a product card.
+ * Amazon shows coupons as "Save X% with coupon" or "Save $X.XX with coupon".
+ */
+export function extractCoupon(card: HTMLElement): CouponInfo | null {
+  const couponEl = card.querySelector('[data-component-type="s-coupon-component"]');
+  if (!couponEl) return null;
+
+  const text = couponEl.textContent || "";
+
+  // Match "Save 35%" pattern
+  const percentMatch = text.match(/Save\s+(\d+)%/i);
+  if (percentMatch) {
+    return { type: "percent", value: parseInt(percentMatch[1], 10) };
+  }
+
+  // Match "Save $5.00" or "$5 off" patterns
+  const amountMatch = text.match(/Save\s+\$?([\d.]+)/i) || text.match(/\$([\d.]+)\s+off/i);
+  if (amountMatch) {
+    return { type: "amount", value: parseFloat(amountMatch[1]) };
+  }
+
+  // Coupon present but couldn't parse value
+  return null;
+}
+
+/**
+ * Detect if a "Limited time deal" badge is present on a product card.
+ */
+export function extractDealBadge(card: HTMLElement): boolean {
+  // Check for deal badge by CSS class (hashed but stable prefix)
+  const badgeEl = card.querySelector('[class*="dealBadge"], [data-deal-badge]');
+  if (badgeEl) return true;
+
+  // Check for "Limited time deal" text in badge-like elements
+  const badges = card.querySelectorAll("span.a-badge-text, span[class*='dealLabel']");
+  for (const badge of badges) {
+    if (badge.textContent?.toLowerCase().includes("limited time deal")) {
+      return true;
+    }
+  }
+
+  // Also check for deal text in the general card
+  const dealText = card.querySelector("span.a-size-mini");
+  if (dealText?.textContent?.toLowerCase().includes("limited time deal")) {
+    return true;
+  }
+
+  return false;
 }

@@ -1,6 +1,7 @@
 import type { Product } from "../../types";
 import { buildCccUrl } from "../../util/url";
 import { trustBrand, blockBrand } from "../../util/storage";
+import { addToWatchlist, isWatched } from "../../watchlist/storage";
 
 /**
  * Inject per-card action buttons onto a product card.
@@ -70,6 +71,42 @@ export function injectCardActions(
       }
     });
     container.appendChild(blockBtn);
+  }
+
+  // Watch price button (only for products with price and ASIN)
+  if (product.price != null && product.asin) {
+    const asin = product.asin;
+    const watchBtn = createButton("👁️ Watch Price", "Get notified when the price drops");
+
+    // Check if already watched and update button state
+    isWatched(asin).then((watched) => {
+      if (watched) {
+        watchBtn.textContent = "👁️ Watching";
+        watchBtn.style.background = "#e7f4f7";
+      }
+    }).catch(() => { /* ignore */ });
+
+    watchBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        // Default target: 10% below current price
+        const target = Math.round(product.price! * 0.9 * 100) / 100;
+        await addToWatchlist(
+          asin,
+          product.title,
+          product.price!,
+          target,
+          window.location.hostname,
+        );
+        watchBtn.textContent = "👁️ Watching!";
+        watchBtn.style.background = "#e7f4f7";
+      } catch (err) {
+        console.warn("[BAS] Failed to add to watchlist:", err);
+        watchBtn.textContent = "⚠ Error";
+      }
+    });
+    container.appendChild(watchBtn);
   }
 
   // Insert after the title area or at the bottom of the card

@@ -52,7 +52,14 @@
       </label>
       <label class="toggle-row">
         <span class="toggle-label">
-          <span class="toggle-icon">🏷️</span> Pre-load Product Details
+          <span class="toggle-icon">🏷️</span> Deal Quality Badges
+        </span>
+        <input type="checkbox" id="pref-deal-badges" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">📦</span> Pre-load Product Details
         </span>
         <input type="checkbox" id="pref-preload" class="toggle-input" />
         <span class="toggle-slider"></span>
@@ -97,6 +104,15 @@
           <option value="fba">Fulfilled by Amazon</option>
           <option value="third-party">Third-Party</option>
         </select>
+      </div>
+    </section>
+
+    <!-- Price Watchlist -->
+    <section class="section">
+      <h2 class="section-title">🔔 Price Watchlist</h2>
+      <div id="watchlist-container">
+        <p class="section-desc" id="watchlist-empty">No items being watched. Use the 👁️ button on search results to watch prices.</p>
+        <div id="watchlist-items"></div>
       </div>
     </section>
 

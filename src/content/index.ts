@@ -15,6 +15,8 @@ import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
 import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
+import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
+import { computeDealScore } from "./dealScoring";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
 import { findDuplicates } from "./dedup";
@@ -35,6 +37,7 @@ const GLOBAL_STYLES = `
 ${REVIEW_BADGE_STYLES}
 ${REVIEW_INSIGHTS_STYLES}
 ${PRICE_SPARKLINE_STYLES}
+${DEAL_BADGE_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -382,6 +385,14 @@ async function filterAllProducts(): Promise<void> {
     // Inject price history sparkline for visible products with ASINs
     if (currentPrefs.showSparklines && result !== "hide" && product.asin) {
       injectPriceSparkline(product.element, product.asin);
+    }
+
+    // Inject deal quality badge for products with deal signals
+    if (currentPrefs.showDealBadges && result !== "hide") {
+      const dealScore = computeDealScore(product);
+      if (dealScore) {
+        injectDealBadge(product.element, dealScore);
+      }
     }
   }
 

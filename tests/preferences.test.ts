@@ -10,6 +10,7 @@ describe("GlobalPreferences defaults", () => {
     expect(DEFAULT_PREFERENCES.bandwidthMode).toBe("balanced");
     expect(DEFAULT_PREFERENCES.showSparklines).toBe(true);
     expect(DEFAULT_PREFERENCES.showReviewBadges).toBe(true);
+    expect(DEFAULT_PREFERENCES.showDealBadges).toBe(true);
     expect(DEFAULT_PREFERENCES.preloadDetails).toBe(true);
     expect(DEFAULT_PREFERENCES.useMLAnalysis).toBe(false);
     expect(DEFAULT_PREFERENCES.hideSponsoredDefault).toBe(false);
@@ -26,6 +27,7 @@ describe("applyBandwidthPreset", () => {
     expect(result.bandwidthMode).toBe("high");
     expect(result.showSparklines).toBe(true);
     expect(result.showReviewBadges).toBe(true);
+    expect(result.showDealBadges).toBe(true);
     expect(result.preloadDetails).toBe(true);
     expect(result.useMLAnalysis).toBe(true);
   });
@@ -35,6 +37,7 @@ describe("applyBandwidthPreset", () => {
     expect(result.bandwidthMode).toBe("low");
     expect(result.showSparklines).toBe(false);
     expect(result.showReviewBadges).toBe(false);
+    expect(result.showDealBadges).toBe(false);
     expect(result.preloadDetails).toBe(false);
     expect(result.useMLAnalysis).toBe(false);
   });
@@ -44,6 +47,7 @@ describe("applyBandwidthPreset", () => {
     expect(result.bandwidthMode).toBe("balanced");
     expect(result.showSparklines).toBe(true);
     expect(result.showReviewBadges).toBe(true);
+    expect(result.showDealBadges).toBe(true);
     expect(result.preloadDetails).toBe(true);
     expect(result.useMLAnalysis).toBe(false);
   });

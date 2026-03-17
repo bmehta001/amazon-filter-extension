@@ -16,6 +16,20 @@ export interface Product {
   brandCertain?: boolean;
   /** Seller/fulfillment info, populated asynchronously from product detail page. */
   seller?: SellerInfo;
+  /** Original "List" price shown as strikethrough (before discount). */
+  listPrice?: number;
+  /** Coupon info if a coupon badge is present. */
+  coupon?: CouponInfo;
+  /** True if a "Limited time deal" badge is present. */
+  hasDealBadge?: boolean;
+}
+
+/** Coupon information extracted from a search card. */
+export interface CouponInfo {
+  /** Whether the coupon is a percentage or fixed amount. */
+  type: "percent" | "amount";
+  /** The coupon value (e.g., 35 for "Save 35%", or 5.00 for "Save $5.00"). */
+  value: number;
 }
 
 /** Seller information extracted from a product detail page. */
@@ -52,6 +66,8 @@ export interface GlobalPreferences {
   showSparklines: boolean;
   /** Show review trust badges (green/yellow/red) on search cards. */
   showReviewBadges: boolean;
+  /** Show deal quality badges next to prices. */
+  showDealBadges: boolean;
   /** Pre-load product detail pages for brand/seller enrichment. */
   preloadDetails: boolean;
   /** Use ML-powered review analysis (heavier computation). */
@@ -100,6 +116,7 @@ export const DEFAULT_PREFERENCES: GlobalPreferences = {
   bandwidthMode: "balanced",
   showSparklines: true,
   showReviewBadges: true,
+  showDealBadges: true,
   preloadDetails: true,
   useMLAnalysis: false,
   hideSponsoredDefault: false,
@@ -122,6 +139,7 @@ export function applyBandwidthPreset(
         bandwidthMode: "high",
         showSparklines: true,
         showReviewBadges: true,
+        showDealBadges: true,
         preloadDetails: true,
         useMLAnalysis: true,
       };
@@ -131,6 +149,7 @@ export function applyBandwidthPreset(
         bandwidthMode: "low",
         showSparklines: false,
         showReviewBadges: false,
+        showDealBadges: false,
         preloadDetails: false,
         useMLAnalysis: false,
       };
@@ -140,6 +159,7 @@ export function applyBandwidthPreset(
         bandwidthMode: "balanced",
         showSparklines: true,
         showReviewBadges: true,
+        showDealBadges: true,
         preloadDetails: true,
         useMLAnalysis: false,
       };

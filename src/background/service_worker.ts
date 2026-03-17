@@ -1,4 +1,5 @@
 import { refreshAllowlistFromRemote } from "../brand/allowlist";
+import { checkWatchlistPrices, WATCHLIST_ALARM_NAME, WATCHLIST_CHECK_INTERVAL_MINUTES } from "../watchlist/checker";
 
 const ALARM_NAME = "refreshBrandAllowlist";
 const REFRESH_INTERVAL_MINUTES = 1440; // 24 hours
@@ -21,6 +22,12 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     periodInMinutes: REFRESH_INTERVAL_MINUTES,
   });
 
+  // Set up watchlist price check alarm
+  await chrome.alarms.create(WATCHLIST_ALARM_NAME, {
+    delayInMinutes: 5,
+    periodInMinutes: WATCHLIST_CHECK_INTERVAL_MINUTES,
+  });
+
   // Perform initial allowlist refresh
   if (details.reason === "install" || details.reason === "update") {
     const success = await refreshAllowlistFromRemote();
@@ -35,6 +42,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     console.log("[BAS] Refreshing brand allowlist...");
     const success = await refreshAllowlistFromRemote();
     console.log("[BAS] Allowlist refresh:", success ? "success" : "failed");
+  }
+  if (alarm.name === WATCHLIST_ALARM_NAME) {
+    console.log("[BAS] Checking watchlist prices...");
+    await checkWatchlistPrices();
   }
 });
 
