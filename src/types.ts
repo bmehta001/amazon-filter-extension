@@ -22,6 +22,8 @@ export interface Product {
   coupon?: CouponInfo;
   /** True if a "Limited time deal" badge is present. */
   hasDealBadge?: boolean;
+  /** Country of Origin, populated asynchronously from product detail page. */
+  countryOfOrigin?: string;
 }
 
 /** Coupon information extracted from a search card. */
@@ -99,6 +101,12 @@ export interface FilterState {
   networkUsage: NetworkUsage;
   sellerFilter: SellerFilter;
   sortBy: SortCriteria;
+  /** Country of Origin — include only these countries (empty = no filter). */
+  originInclude: string[];
+  /** Country of Origin — exclude these countries. */
+  originExclude: string[];
+  /** Hide products with unknown/missing country of origin. */
+  hideUnknownOrigin: boolean;
 }
 
 /** Sort criteria for client-side product sorting. */
@@ -189,6 +197,9 @@ export const DEFAULT_FILTERS: FilterState = {
   networkUsage: "auto",
   sellerFilter: "any",
   sortBy: "default",
+  originInclude: [],
+  originExclude: [],
+  hideUnknownOrigin: false,
 };
 
 /** Default storage data. */

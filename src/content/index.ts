@@ -100,6 +100,8 @@ const reviewDataMap = new Map<string, ProductReviewData>();
 const brandMap = new Map<string, string>();
 /** Map ASIN → seller info for products enriched via background fetch. */
 const sellerMap = new Map<string, SellerInfo>();
+/** Map ASIN → country of origin for products enriched via background fetch. */
+const originMap = new Map<string, string>();
 /** Global preferences loaded from popup settings. */
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 
@@ -356,6 +358,11 @@ async function filterAllProducts(): Promise<void> {
     // Attach cached seller info if available
     if (product.asin && !product.seller && sellerMap.has(product.asin)) {
       product.seller = sellerMap.get(product.asin)!;
+    }
+
+    // Attach cached country of origin if available
+    if (product.asin && !product.countryOfOrigin && originMap.has(product.asin)) {
+      product.countryOfOrigin = originMap.get(product.asin)!;
     }
 
     // Attach cached review quality if available
@@ -832,6 +839,12 @@ function queueDetailEnrichment(products: Product[]): void {
           }
 
           seller = details.seller;
+
+          if (details.countryOfOrigin) {
+            originMap.set(asin, details.countryOfOrigin);
+            product.countryOfOrigin = details.countryOfOrigin;
+            updateOriginDisplay(product);
+          }
         }
 
         let needsRefilter = false;
@@ -847,6 +860,10 @@ function queueDetailEnrichment(products: Product[]): void {
         if (seller) {
           sellerMap.set(asin, seller);
           product.seller = seller;
+          needsRefilter = true;
+        }
+
+        if (product.countryOfOrigin) {
           needsRefilter = true;
         }
 
@@ -869,6 +886,30 @@ function updateBrandDisplay(product: Product): void {
   const brandLabel = product.element.querySelector(".bas-brand-label");
   if (brandLabel) {
     brandLabel.textContent = product.brand;
+  }
+}
+
+/** Show a small country of origin flag on the product card. */
+function updateOriginDisplay(product: Product): void {
+  if (!product.countryOfOrigin) return;
+  const existing = product.element.querySelector(".bas-origin-badge");
+  if (existing) {
+    existing.textContent = `🌍 ${product.countryOfOrigin}`;
+    return;
+  }
+  const badge = document.createElement("span");
+  badge.className = "bas-origin-badge";
+  badge.textContent = `🌍 ${product.countryOfOrigin}`;
+  badge.title = `Country of Origin: ${product.countryOfOrigin}`;
+  badge.style.cssText = `
+    display: inline-block; font-size: 10px; color: #565959;
+    background: #f0f2f2; border-radius: 3px; padding: 1px 5px;
+    margin-top: 2px; margin-left: 4px;
+  `;
+  // Insert near brand or title
+  const actionBar = product.element.querySelector(".bas-card-actions");
+  if (actionBar) {
+    actionBar.appendChild(badge);
   }
 }
 

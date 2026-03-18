@@ -71,6 +71,11 @@ export async function applyFilters(
     return "hide";
   }
 
+  // P7: Country of Origin filter
+  if (matchesOriginFilter(product, state) === false) {
+    return "hide";
+  }
+
   return "show";
 }
 
@@ -199,4 +204,32 @@ export function applyFilterResult(
  */
 export function markTrusted(element: HTMLElement): void {
   element.classList.add("bas-trusted");
+}
+
+/**
+ * Check if product passes the Country of Origin filter.
+ * Returns true if it should be shown, false if it should be hidden.
+ */
+function matchesOriginFilter(product: Product, state: FilterState): boolean {
+  const hasFilter = state.originInclude.length > 0 || state.originExclude.length > 0 || state.hideUnknownOrigin;
+  if (!hasFilter) return true;
+
+  const origin = product.countryOfOrigin?.toLowerCase();
+
+  // If no origin data and hideUnknownOrigin is set, hide it
+  if (!origin) return !state.hideUnknownOrigin;
+
+  // Check exclude list first
+  if (state.originExclude.length > 0) {
+    if (state.originExclude.some((c) => origin.includes(c.toLowerCase()))) {
+      return false;
+    }
+  }
+
+  // Check include list (if set, only allow listed countries)
+  if (state.originInclude.length > 0) {
+    return state.originInclude.some((c) => origin.includes(c.toLowerCase()));
+  }
+
+  return true;
 }

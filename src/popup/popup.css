@@ -277,3 +277,168 @@ body {
   border-color: #cc0c39;
   color: #cc0c39;
 }
+
+/* Shortlists */
+.shortlist-card {
+  border: 1px solid #e7e8ea;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.shortlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #f7f8fa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.shortlist-header:hover {
+  background: #eef0f2;
+}
+
+.shortlist-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f1111;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortlist-count {
+  font-size: 11px;
+  color: #888c8c;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.shortlist-toggle {
+  font-size: 10px;
+  color: #888c8c;
+  margin-left: 6px;
+  transition: transform 0.2s;
+}
+
+.shortlist-toggle.open {
+  transform: rotate(90deg);
+}
+
+.shortlist-body {
+  display: none;
+  padding: 0;
+  border-top: 1px solid #e7e8ea;
+}
+
+.shortlist-body.open {
+  display: block;
+}
+
+.shortlist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 11px;
+}
+
+.shortlist-item:last-child {
+  border-bottom: none;
+}
+
+.shortlist-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.shortlist-item-title {
+  color: #0066c0;
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  font-size: 11px;
+}
+
+.shortlist-item-title:hover {
+  color: #c45500;
+  text-decoration: underline;
+}
+
+.shortlist-item-meta {
+  font-size: 10px;
+  color: #565959;
+  margin-top: 2px;
+}
+
+.shortlist-item-remove {
+  background: none;
+  border: none;
+  font-size: 10px;
+  cursor: pointer;
+  color: #888c8c;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.shortlist-item-remove:hover {
+  color: #cc0c39;
+}
+
+.shortlist-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #fafafa;
+  border-top: 1px solid #f0f0f0;
+}
+
+.shortlist-toolbar-btn {
+  background: none;
+  border: 1px solid #d5d9d9;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  color: #565959;
+  font-family: inherit;
+}
+
+.shortlist-toolbar-btn:hover {
+  border-color: #007185;
+  color: #007185;
+}
+
+.shortlist-toolbar-btn.danger:hover {
+  border-color: #cc0c39;
+  color: #cc0c39;
+}
+
+.shortlist-actions {
+  margin-top: 6px;
+}
+
+.shortlist-action-btn {
+  background: #fff;
+  border: 1px dashed #d5d9d9;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #0066c0;
+  width: 100%;
+  font-family: inherit;
+}
+
+.shortlist-action-btn:hover {
+  border-color: #007185;
+  background: #f0f8fa;
+}

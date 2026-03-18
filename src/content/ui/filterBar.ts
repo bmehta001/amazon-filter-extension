@@ -447,6 +447,9 @@ export function createFilterBar(
       totalPages: Math.min(10, Math.max(1, parseInt(pagesSelect.value, 10) || 1)),
       networkUsage: "auto",
       sortBy: "default",
+      originInclude: [],
+      originExclude: [],
+      hideUnknownOrigin: false,
     };
     callbacks.onFilterChange(state);
   }

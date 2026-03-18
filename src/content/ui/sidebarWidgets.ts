@@ -371,6 +371,49 @@ export function createDistributedFilters(
   injectAfterSection(enhancedBrandSection ?? null, sellerWidget, sidebar);
   injectedWidgets.push(sellerWidget);
 
+  // ── 6. Country of Origin filter widget ──────────────────────────────
+  const originWidget = createWidget("🌍 Country of Origin", (container) => {
+    const includeGroup = wGroup("Show only:", "Only show products made in these countries (comma-separated)");
+    refs.originIncludeInput = document.createElement("input");
+    refs.originIncludeInput.type = "text";
+    refs.originIncludeInput.className = "bas-w-input";
+    refs.originIncludeInput.placeholder = "e.g. USA, Japan, Germany";
+    refs.originIncludeInput.value = initialState.originInclude.join(", ");
+    refs.originIncludeInput.addEventListener("change", emitChange);
+    includeGroup.appendChild(refs.originIncludeInput);
+    container.appendChild(includeGroup);
+
+    const excludeGroup = wGroup("Hide from:", "Hide products made in these countries (comma-separated)");
+    refs.originExcludeInput = document.createElement("input");
+    refs.originExcludeInput.type = "text";
+    refs.originExcludeInput.className = "bas-w-input";
+    refs.originExcludeInput.placeholder = "e.g. China";
+    refs.originExcludeInput.value = initialState.originExclude.join(", ");
+    refs.originExcludeInput.addEventListener("change", emitChange);
+    excludeGroup.appendChild(refs.originExcludeInput);
+    container.appendChild(excludeGroup);
+
+    const unknownGroup = wGroup("", "");
+    const unknownLabel = document.createElement("label");
+    unknownLabel.style.cssText = "display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;";
+    refs.hideUnknownOriginCb = document.createElement("input");
+    refs.hideUnknownOriginCb.type = "checkbox";
+    refs.hideUnknownOriginCb.checked = initialState.hideUnknownOrigin;
+    refs.hideUnknownOriginCb.addEventListener("change", emitChange);
+    unknownLabel.appendChild(refs.hideUnknownOriginCb);
+    unknownLabel.appendChild(document.createTextNode("Hide products with unknown origin"));
+    unknownGroup.appendChild(unknownLabel);
+    container.appendChild(unknownGroup);
+
+    const note = document.createElement("div");
+    note.className = "bas-w-note";
+    note.textContent = "ℹ️ Origin data is loaded from product detail pages. Enable \"Pre-load Product Details\" for best results.";
+    container.appendChild(note);
+  });
+
+  injectAfterSection(sellerWidget, originWidget, sidebar);
+  injectedWidgets.push(originWidget);
+
   return mainWidget;
 }
 
@@ -554,6 +597,10 @@ interface WidgetRefs {
   sellerSelect: HTMLSelectElement;
   excludedBrands: Set<string>;
   excludeBrandsInput?: HTMLTextAreaElement; // fallback only
+  // Country of Origin
+  originIncludeInput: HTMLInputElement;
+  originExcludeInput: HTMLInputElement;
+  hideUnknownOriginCb: HTMLInputElement;
 }
 
 function gatherState(refs: WidgetRefs, state: FilterState): void {
@@ -578,6 +625,15 @@ function gatherState(refs: WidgetRefs, state: FilterState): void {
   state.brandMode = (refs.brandSelect?.value as BrandMode) ?? state.brandMode;
   state.sellerFilter = (refs.sellerSelect?.value as SellerFilter) ?? state.sellerFilter;
   state.sortBy = (refs.sortSelect?.value as FilterState["sortBy"]) ?? state.sortBy;
+
+  // Country of Origin
+  state.originInclude = refs.originIncludeInput?.value
+    ? parseCountryList(refs.originIncludeInput.value)
+    : state.originInclude;
+  state.originExclude = refs.originExcludeInput?.value
+    ? parseCountryList(refs.originExcludeInput.value)
+    : state.originExclude;
+  state.hideUnknownOrigin = refs.hideUnknownOriginCb?.checked ?? state.hideUnknownOrigin;
 
   // Collect excluded brands from the integrated UI or fallback textarea
   const excluded: string[] = [];
@@ -704,6 +760,14 @@ function parseTokens(text: string): string[] {
     .split(/[,\n]/)
     .map((t) => t.trim())
     .filter((t) => t.length > 0);
+}
+
+/** Parse comma-separated country names, trimming whitespace. */
+function parseCountryList(text: string): string[] {
+  return text
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
 }
 
 // ── Amazon Brand Section Enhancement ──────────────────────────────────

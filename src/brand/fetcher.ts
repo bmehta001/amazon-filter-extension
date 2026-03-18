@@ -12,6 +12,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 export interface ProductDetailResult {
   brand: string | null;
   seller: SellerInfo | null;
+  countryOfOrigin: string | null;
 }
 
 /**
@@ -31,7 +32,7 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
 
     if (!response.ok) {
       console.warn(TAG, `Detail fetch failed for ${asin}: HTTP ${response.status}`);
-      return { brand: null, seller: null };
+      return { brand: null, seller: null, countryOfOrigin: null };
     }
 
     const html = await response.text();
@@ -40,10 +41,11 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
     return {
       brand: extractBrandFromDocument(doc),
       seller: extractSellerFromDocument(doc),
+      countryOfOrigin: extractCountryOfOrigin(doc),
     };
   } catch (err) {
     console.warn(TAG, `Error fetching details for ${asin}:`, err);
-    return { brand: null, seller: null };
+    return { brand: null, seller: null, countryOfOrigin: null };
   }
 }
 
@@ -165,6 +167,95 @@ export function extractSellerFromDocument(doc: Document): SellerInfo | null {
   return null;
 }
 
+/**
+ * Extract Country of Origin from a parsed product detail page.
+ * Searches Amazon's structured product information tables.
+ */
+export function extractCountryOfOrigin(doc: Document): string | null {
+  // Strategy 1: Product Overview table (po-* classes)
+  const poOrigin = doc.querySelector("tr.po-country_of_origin td.po-break-word");
+  if (poOrigin?.textContent?.trim()) {
+    return normalizeCountry(poOrigin.textContent.trim());
+  }
+
+  // Strategy 2: Tech specs / detail bullets table rows
+  const tableRows = doc.querySelectorAll(
+    "#productDetails_techSpec_section_1 tr, " +
+    "#productDetails_detailBullets_sections1 tr, " +
+    "#productDetails_db_sections tr, " +
+    "#detailBulletsWrapper_feature_div tr, " +
+    "#prodDetails tr"
+  );
+  for (const row of tableRows) {
+    const header = row.querySelector("th, td:first-child");
+    const value = row.querySelector("td:last-child");
+    const headerText = header?.textContent?.trim().toLowerCase() ?? "";
+    if (
+      (headerText === "country of origin" || headerText.includes("country of origin")) &&
+      value?.textContent?.trim()
+    ) {
+      return normalizeCountry(value.textContent.trim());
+    }
+  }
+
+  // Strategy 3: Detail bullets format (spans with Unicode directional marks)
+  const bullets = doc.querySelectorAll("#detailBullets_feature_div li span.a-list-item");
+  for (const li of bullets) {
+    const text = li.textContent || "";
+    const match = text.match(/Country of Origin\s*[:\u200F\u200E]+\s*(.+)/i);
+    if (match) return normalizeCountry(match[1].trim());
+  }
+
+  // Strategy 4: Additional info section (newer layout)
+  const additionalInfo = doc.querySelectorAll(
+    "#productDetails_expanderTables_dep498 tr, " +
+    ".prodDetTable tr"
+  );
+  for (const row of additionalInfo) {
+    const header = row.querySelector("th, td:first-child");
+    const value = row.querySelector("td:last-child");
+    if (
+      header?.textContent?.trim().toLowerCase().includes("country of origin") &&
+      value?.textContent?.trim()
+    ) {
+      return normalizeCountry(value.textContent.trim());
+    }
+  }
+
+  return null;
+}
+
+/** Normalize country name: trim whitespace, title-case, standardize common variants. */
+function normalizeCountry(raw: string): string {
+  // Remove extra whitespace and unicode marks
+  let name = raw.replace(/[\u200F\u200E\u00A0]/g, " ").replace(/\s+/g, " ").trim();
+
+  // Standardize common variants
+  const COUNTRY_MAP: Record<string, string> = {
+    "usa": "United States",
+    "u.s.a.": "United States",
+    "u.s.a": "United States",
+    "u.s.": "United States",
+    "us": "United States",
+    "united states of america": "United States",
+    "uk": "United Kingdom",
+    "u.k.": "United Kingdom",
+    "great britain": "United Kingdom",
+    "prc": "China",
+    "people's republic of china": "China",
+    "p.r.c.": "China",
+    "south korea": "South Korea",
+    "republic of korea": "South Korea",
+    "korea, republic of": "South Korea",
+    "taiwan, province of china": "Taiwan",
+    "viet nam": "Vietnam",
+  };
+
+  const lower = name.toLowerCase();
+  if (COUNTRY_MAP[lower]) return COUNTRY_MAP[lower];
+  return name;
+}
+
 function parseSellerText(text: string): SellerInfo | null {
   const normalized = text.replace(/\s+/g, " ").trim();
 
@@ -248,7 +339,7 @@ export function createRateLimitedDetailFetcher(
       const result = await fetchProductDetails(item.asin);
       item.resolve(result);
     } catch {
-      item.resolve({ brand: null, seller: null });
+      item.resolve({ brand: null, seller: null, countryOfOrigin: null });
     } finally {
       active--;
       if (queue.length > 0) {

@@ -130,6 +130,29 @@ export function buildFilterReasons(product: Product, filters: FilterState): Filt
     reasons.push({ filter: "Seller", passed: pass, detail });
   }
 
+  // Country of Origin
+  if (filters.originInclude.length > 0 || filters.originExclude.length > 0 || filters.hideUnknownOrigin) {
+    const origin = product.countryOfOrigin;
+    let pass = true;
+    let detail = "";
+    if (!origin) {
+      pass = !filters.hideUnknownOrigin;
+      detail = pass ? "Origin unknown (allowed)" : "Origin unknown ✗";
+    } else {
+      const lower = origin.toLowerCase();
+      if (filters.originExclude.some((c) => lower.includes(c.toLowerCase()))) {
+        pass = false;
+        detail = `${origin} — excluded ✗`;
+      } else if (filters.originInclude.length > 0) {
+        pass = filters.originInclude.some((c) => lower.includes(c.toLowerCase()));
+        detail = pass ? `${origin} — included ✓` : `${origin} — not in include list ✗`;
+      } else {
+        detail = `${origin} ✓`;
+      }
+    }
+    reasons.push({ filter: "Origin", passed: pass, detail });
+  }
+
   return reasons;
 }
 
