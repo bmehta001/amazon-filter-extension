@@ -206,7 +206,7 @@ describe("exportShortlistCsv", () => {
     const lines = csv.split("\n");
 
     expect(lines[0]).toBe(
-      "ASIN,Title,Brand,Price,Rating,Reviews,URL,Added,Deal Score,Review Quality",
+      "ASIN,Title,Brand,Price,Rating,Reviews,URL,Added,Deal Score,Review Authenticity",
     );
     expect(lines.length).toBe(2);
     expect(lines[1]).toContain("B0TEST0001");

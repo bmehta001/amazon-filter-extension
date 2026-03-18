@@ -336,7 +336,7 @@ describe("createTransparencyTooltip", () => {
     const statsDiv = el.querySelector(".bas-tt-stats")!;
     expect(statsDiv.textContent).toContain("Showing 40 of 48");
     expect(statsDiv.textContent).toContain("3 sponsored");
-    expect(statsDiv.textContent).toContain("2 low reviews");
+    expect(statsDiv.textContent).toContain("2 below review minimum");
     // Price hidden count is 0, should not be in text
     expect(statsDiv.textContent).not.toContain("out of price range");
   });

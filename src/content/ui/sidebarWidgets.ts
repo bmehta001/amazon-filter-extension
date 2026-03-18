@@ -97,7 +97,7 @@ export function createDistributedFilters(
     container.appendChild(excludeGroup);
 
     // Dedup Variants
-    const dedupGroup = wGroup("Dedup Variants:", "Hide duplicate product variants (e.g. same item in different colors). Keeps the variant with the most reviews.");
+    const dedupGroup = wGroup("🔄 Hide Duplicate Variants:", "Hides products that are just color/size variations of the same item. Keeps the variant with the most reviews.");
     refs.dedupCheckboxes = new Map();
     const dedupToggle = wToggleButton("Variants", initialState.dedupCategories.length);
     const dedupContainer = document.createElement("div");
@@ -158,8 +158,8 @@ export function createDistributedFilters(
     const sortOptions: [string, string][] = [
       ["default", "Amazon Default"],
       ["reviews", "Most Reviews"],
-      ["value", "Best Value (rating × reviews / price)"],
-      ["trending", "Trending (popular + high rated)"],
+      ["value", "Best Value (quality vs. price)"],
+      ["trending", "Trending (most popular & top-rated)"],
       ["deal-score", "Best Deals"],
       ["price-low", "Price: Low → High"],
       ["price-high", "Price: High → Low"],
@@ -181,7 +181,7 @@ export function createDistributedFilters(
     container.appendChild(sortGroup);
 
     // Query Builder
-    const qbGroup = wGroup("Query Builder:", "Apply exclude keywords as -term modifiers in the Amazon search box");
+    const qbGroup = wGroup("Smart Search:", "Automatically adds your exclusions to Amazon's search box for better results");
     refs.qbCb = wCheckbox(initialState.queryBuilder, emitChange);
     const qbApply = wButton("Apply to Search", "Add exclusions to search box", () => {
       callbacks.onQueryBuilderApply(parseTokens(refs.excludeTextarea.value));
@@ -230,7 +230,7 @@ export function createDistributedFilters(
     container.appendChild(reviewGroup);
 
     // Review Quality
-    const qualityGroup = wGroup("Review Quality:", "Minimum review authenticity score (0 = off). Analyzes histograms, text patterns, and temporal anomalies.");
+    const qualityGroup = wGroup("Review Authenticity:", "Filters products with suspicious review patterns (fake reviews, review manipulation). Score 0 = off.");
     refs.qualitySlider = wRangeInput("0", "100", "5", String(initialState.minReviewQuality), () => {
       refs.qualityNumberInput.value = refs.qualitySlider.value;
       emitChange();
@@ -248,7 +248,7 @@ export function createDistributedFilters(
     container.appendChild(qualityGroup);
 
     // AI Analysis
-    const mlGroup = wGroup("🤖 AI Analysis:", "Use ML sentiment analysis (distilBERT) to detect rating mismatches. Downloads ~27 MB model on first use.");
+    const mlGroup = wGroup("🤖 AI Review Analysis:", "Uses AI to detect when reviews don't match the product's star rating. Downloads ~27 MB model on first use.");
     refs.mlCb = wCheckbox(initialState.useMLAnalysis ?? false, emitChange);
     mlGroup.appendChild(refs.mlCb);
     container.appendChild(mlGroup);
@@ -352,7 +352,7 @@ export function createDistributedFilters(
     const sellerOptions: [string, string][] = [
       ["any", "Any Seller"],
       ["amazon", "Amazon Only"],
-      ["fba", "Amazon + FBA"],
+      ["fba", "Fulfilled by Amazon"],
       ["third-party", "Third-Party Only"],
     ];
     for (const [val, label] of sellerOptions) {
@@ -407,7 +407,7 @@ export function createDistributedFilters(
 
     const note = document.createElement("div");
     note.className = "bas-w-note";
-    note.textContent = "ℹ️ Origin data is loaded from product detail pages. Enable \"Pre-load Product Details\" for best results.";
+    note.textContent = "ℹ️ Country data comes from product pages. Works best with Pre-load Details enabled in extension settings.";
     container.appendChild(note);
   });
 
@@ -441,7 +441,7 @@ export function updateProcessingState(host: HTMLElement, state: "processing" | "
   if (!el) return;
 
   if (state === "processing") {
-    el.textContent = detail ?? "⏳ Processing filters...";
+    el.textContent = detail ?? "⏳ Filtering results...";
     el.style.color = "#c45500"; // Amazon orange
   } else {
     el.style.color = ""; // Reset to default
@@ -866,9 +866,9 @@ function buildBrandModeSelect(currentMode: BrandMode, onChange: () => void): HTM
   select.className = "bas-w-select";
   const options: [BrandMode, string][] = [
     ["off", "Off"],
-    ["dim", "Dim Unknown"],
-    ["hide", "Hide Suspicious"],
-    ["trusted-only", "Trusted Only"],
+    ["dim", "Fade Unverified"],
+    ["hide", "Hide Unverified"],
+    ["trusted-only", "Trusted Brands Only"],
   ];
   for (const [val, label] of options) {
     const opt = document.createElement("option");

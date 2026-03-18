@@ -52,7 +52,7 @@ export function injectCardActions(
         onBrandAction();
       } catch (err) {
         console.warn("[BAS] Failed to trust brand:", err);
-        trustBtn.textContent = "⚠ Error";
+        trustBtn.textContent = "⚠ Couldn't save";
       }
     });
     container.appendChild(trustBtn);
@@ -69,7 +69,7 @@ export function injectCardActions(
         onBrandAction();
       } catch (err) {
         console.warn("[BAS] Failed to block brand:", err);
-        blockBtn.textContent = "⚠ Error";
+        blockBtn.textContent = "⚠ Couldn't save";
       }
     });
     container.appendChild(blockBtn);
@@ -105,7 +105,7 @@ export function injectCardActions(
         watchBtn.style.background = "#e7f4f7";
       } catch (err) {
         console.warn("[BAS] Failed to add to watchlist:", err);
-        watchBtn.textContent = "⚠ Error";
+        watchBtn.textContent = "⚠ Couldn't save";
       }
     });
     container.appendChild(watchBtn);
@@ -173,7 +173,7 @@ export function injectCardActions(
               saveBtn.textContent = `📌 In ${list.name}`;
               saveBtn.style.background = "#fef3e2";
             } catch (err) {
-              saveBtn.textContent = "⚠ Error";
+              saveBtn.textContent = "⚠ Couldn't save";
             }
             dropdown.remove();
           });
@@ -206,14 +206,14 @@ export function injectCardActions(
               saveBtn.textContent = `📌 In ${name!.trim()}`;
               saveBtn.style.background = "#fef3e2";
             }).catch(() => {
-              saveBtn.textContent = "⚠ Error";
+              saveBtn.textContent = "⚠ Couldn't save";
             });
           }
           dropdown.remove();
         });
         dropdown.appendChild(newOpt);
       } catch {
-        dropdown.textContent = "Failed to load lists";
+        dropdown.textContent = "Couldn't load shortlists";
       }
 
       saveBtn.style.position = "relative";

@@ -131,9 +131,9 @@ export function createFilterBar(
   const brandSelect = document.createElement("select");
   const brandOptions: [BrandMode, string][] = [
     ["off", "Off"],
-    ["dim", "Dim Unknown"],
-    ["hide", "Hide Suspicious"],
-    ["trusted-only", "Trusted Only"],
+    ["dim", "Fade Unverified"],
+    ["hide", "Hide Unverified"],
+    ["trusted-only", "Trusted Brands Only"],
   ];
   for (const [val, label] of brandOptions) {
     const opt = document.createElement("option");
@@ -155,8 +155,8 @@ export function createFilterBar(
   const sellerOptions: [SellerFilter, string][] = [
     ["any", "Any Seller"],
     ["amazon", "Amazon Only"],
-    ["fba", "Amazon + FBA"],
-    ["third-party", "Third-Party"],
+    ["fba", "Fulfilled by Amazon"],
+    ["third-party", "Third-Party Only"],
   ];
   for (const [val, label] of sellerOptions) {
     const opt = document.createElement("option");
@@ -184,9 +184,9 @@ export function createFilterBar(
   bar.appendChild(sep());
 
   // ── Review Quality ─────────────────────────────────────────────────
-  const qualityGroup = group("Review Quality:");
+  const qualityGroup = group("Review Authenticity:");
   qualityGroup.title =
-    "Minimum review authenticity score (0 = off, 100 = only show products with fully authentic reviews). Analyzes rating histograms, text patterns, and temporal anomalies.";
+    "Filters products with suspicious review patterns (fake reviews, review manipulation). Score 0 = off, 100 = only show products with fully authentic reviews.";
   const qualitySlider = input("range", {
     min: "0",
     max: "100",
@@ -214,9 +214,9 @@ export function createFilterBar(
   bar.appendChild(sep());
 
   // ── AI Analysis ────────────────────────────────────────────────────
-  const mlGroup = group("🤖 AI Analysis:");
+  const mlGroup = group("🤖 AI Review Analysis:");
   mlGroup.title =
-    "Use ML sentiment analysis (distilBERT) to detect rating/text mismatches. Downloads a small AI model (~27 MB) on first use.";
+    "Uses AI to detect when reviews don't match the product's star rating. Downloads a small AI model (~27 MB) on first use.";
   const mlCb = document.createElement("input");
   mlCb.type = "checkbox";
   mlCb.checked = initialState.useMLAnalysis ?? false;
@@ -295,9 +295,9 @@ export function createFilterBar(
   bar.appendChild(sep());
 
   // ── Dedup Variants ─────────────────────────────────────────────────
-  const dedupGroup = group("Dedup Variants:");
+  const dedupGroup = group("🔄 Hide Duplicate Variants:");
   dedupGroup.title =
-    "Hide duplicate product variants (e.g. same item in different colors). Keeps the variant with the most reviews.";
+    "Hides products that are just color/size variations of the same item. Keeps the variant with the most reviews.";
   const dedupCheckboxes = new Map<string, HTMLInputElement>();
 
   const dedupToggle = document.createElement("button");
@@ -384,9 +384,9 @@ export function createFilterBar(
   bar.appendChild(sep());
 
   // ── Query Builder ──────────────────────────────────────────────────
-  const qbGroup = group("Query Builder:");
+  const qbGroup = group("Smart Search:");
   qbGroup.title =
-    "When enabled, the Exclude keywords are applied as -term modifiers in the Amazon search box";
+    "Automatically adds your exclusions to Amazon's search box for better results";
   const qbCb = document.createElement("input");
   qbCb.type = "checkbox";
   qbCb.checked = initialState.queryBuilder;

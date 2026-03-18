@@ -507,7 +507,7 @@ async function filterAllProducts(): Promise<void> {
   // Queue brand + seller enrichment for products with ASINs (non-blocking)
   if (currentPrefs.preloadDetails) {
     if (filterBarHost) {
-      updateProcessingState(filterBarHost, "processing", "⏳ Enriching product details...");
+      updateProcessingState(filterBarHost, "processing", "⏳ Loading product data...");
     }
     queueDetailEnrichment(products);
     if (filterBarHost) {

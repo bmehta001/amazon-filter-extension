@@ -185,7 +185,7 @@ export function exportShortlistCsv(list: Shortlist): string {
     "URL",
     "Added",
     "Deal Score",
-    "Review Quality",
+    "Review Authenticity",
   ];
 
   const rows = list.items.map((item) =>

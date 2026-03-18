@@ -18,11 +18,11 @@
       <h2 class="section-title">⚡ Bandwidth Mode</h2>
       <p class="section-desc">One click to adjust all data-fetching features</p>
       <div class="preset-group" id="preset-group">
-        <button class="preset-btn" data-preset="low" title="Minimal data usage — disables sparklines, review badges, and detail preloading">
+        <button class="preset-btn" data-preset="low" title="Minimal data usage — disables price trend charts, review badges, and detail preloading">
           <span class="preset-icon">🔋</span>
           <span class="preset-label">Low</span>
         </button>
-        <button class="preset-btn" data-preset="balanced" title="Sensible defaults — sparklines and badges on, ML off">
+        <button class="preset-btn" data-preset="balanced" title="Sensible defaults — price trend charts and badges on, ML off">
           <span class="preset-icon">⚖️</span>
           <span class="preset-label">Balanced</span>
         </button>
@@ -38,7 +38,7 @@
       <h2 class="section-title">📊 Data Features</h2>
       <label class="toggle-row">
         <span class="toggle-label">
-          <span class="toggle-icon">📈</span> Price History Sparklines
+          <span class="toggle-icon">📈</span> Price Trend Charts
         </span>
         <input type="checkbox" id="pref-sparklines" class="toggle-input" />
         <span class="toggle-slider"></span>
@@ -52,7 +52,7 @@
       </label>
       <label class="toggle-row">
         <span class="toggle-label">
-          <span class="toggle-icon">🏷️</span> Deal Quality Badges
+          <span class="toggle-icon">🏷️</span> Deal Score Badges
         </span>
         <input type="checkbox" id="pref-deal-badges" class="toggle-input" />
         <span class="toggle-slider"></span>
@@ -89,9 +89,9 @@
         </span>
         <select id="pref-brand-mode" class="select-input">
           <option value="off">Off</option>
-          <option value="dim">Dim Unknown</option>
-          <option value="hide">Hide Unknown</option>
-          <option value="trusted-only">Trusted Only</option>
+          <option value="dim">Fade Unverified</option>
+          <option value="hide">Hide Unverified</option>
+          <option value="trusted-only">Trusted Brands Only</option>
         </select>
       </div>
       <div class="select-row">
@@ -102,7 +102,7 @@
           <option value="any">Any Seller</option>
           <option value="amazon">Amazon Only</option>
           <option value="fba">Fulfilled by Amazon</option>
-          <option value="third-party">Third-Party</option>
+          <option value="third-party">Third-Party Only</option>
         </select>
       </div>
     </section>

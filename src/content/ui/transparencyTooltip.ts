@@ -182,7 +182,7 @@ export function createTransparencyTooltip(
   if (filterResult.action === "show") {
     header.textContent = "✅ Passed all filters";
   } else if (filterResult.action === "dim") {
-    header.textContent = "⚠️ Dimmed (low brand trust)";
+    header.textContent = "⚠️ Dimmed (unverified brand)";
   } else {
     header.textContent = "❌ Hidden by filters";
   }
@@ -215,13 +215,13 @@ export function createTransparencyTooltip(
 
   const statEntries: [number, string][] = [
     [pageStats.hiddenSponsored, "sponsored"],
-    [pageStats.hiddenMinReviews, "low reviews"],
-    [pageStats.hiddenMinRating, "low rated"],
+    [pageStats.hiddenMinReviews, "below review minimum"],
+    [pageStats.hiddenMinRating, "below rating minimum"],
     [pageStats.hiddenPrice, "out of price range"],
-    [pageStats.hiddenBrand, "excluded/untrusted brands"],
+    [pageStats.hiddenBrand, "brand filter"],
     [pageStats.hiddenKeyword, "keyword matches"],
-    [pageStats.hiddenSeller, "seller filtered"],
-    [pageStats.hiddenDedup, "duplicates"],
+    [pageStats.hiddenSeller, "seller filter"],
+    [pageStats.hiddenDedup, "duplicate variants"],
   ];
   for (const [count, label] of statEntries) {
     if (Number(count) > 0) {
