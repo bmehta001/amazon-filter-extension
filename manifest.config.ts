@@ -7,7 +7,7 @@ export default defineManifest({
   version: "1.0.0",
   description:
     "Advanced filters for Amazon search results: min reviews, keyword exclusion, brand trust, CCC price history, and more.",
-  permissions: ["storage", "alarms", "notifications"],
+  permissions: ["storage", "alarms", "notifications", "declarativeContent"],
   host_permissions: [
     "https://www.amazon.com/*",
     "https://www.amazon.co.uk/*",

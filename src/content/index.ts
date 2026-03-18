@@ -84,6 +84,8 @@ const fetchDetails = createRateLimitedDetailFetcher(3, 500);
 let softNavIntervalId: ReturnType<typeof setInterval> | null = null;
 /** Soft-navigation DOM observer for cleanup. */
 let softNavObserver: MutationObserver | null = null;
+/** Sidebar DOM observer — catches filter clicks that replace sidebar content. */
+let sidebarNavObserver: MutationObserver | null = null;
 /** Map ASIN → ReviewScore for products already scored this session. */
 const reviewScoreMap = new Map<string, ReviewScore>();
 /** Map ASIN → ProductInsights for category breakdown. */
@@ -267,26 +269,45 @@ function watchForSoftNavigation(): void {
       isHaulMode = isAmazonHaulPage();
       if (!isAmazonSupportedPage()) return;
 
-      // Re-inject filter bar if it was removed from DOM
-      if (!filterBarHost?.parentElement) {
-        void injectFilterBar().then(() => filterAllProducts());
-      } else {
-        void filterAllProducts();
-      }
+      // Always re-inject on soft navigation — Amazon replaces sidebar content
+      // when its native filters are clicked, destroying our widgets
+      void injectFilterBar().then(() => filterAllProducts());
     }
   }, CHECK_INTERVAL_MS);
 
-  // Also watch for DOM replacement of the results container
+  // Also watch for DOM replacement of the results container AND sidebar
   const searchContainer = document.querySelector("#search") ||
     (isHaulMode ? document.querySelector("main, [role='main']") : null);
-  if (searchContainer) {
-    softNavObserver = new MutationObserver(() => {
-      if (filterBarHost && !filterBarHost.parentElement) {
-        console.log("[BAS] Filter bar removed from DOM, re-injecting");
+  const sidebarContainer = document.querySelector("#s-refinements, [data-component-type='s-refinements']");
+
+  let reinjectTimer: ReturnType<typeof setTimeout> | null = null;
+  const handleDomChange = () => {
+    // Debounce — Amazon's re-render fires many mutations in quick succession
+    if (reinjectTimer) return;
+    reinjectTimer = setTimeout(() => {
+      reinjectTimer = null;
+      // Check if our widgets were removed from DOM
+      const widgetsGone = filterBarHost && !filterBarHost.parentElement;
+      // In distributed mode, also check if the sidebar's widget host was detached
+      const sidebarHostGone = isDistributedMode &&
+        !document.querySelector(".bas-sidebar-widget-host");
+
+      if (widgetsGone || sidebarHostGone) {
+        console.log("[BAS] Widgets removed from DOM, re-injecting");
         void injectFilterBar().then(() => filterAllProducts());
       }
-    });
+    }, 300);
+  };
+
+  if (searchContainer) {
+    softNavObserver = new MutationObserver(handleDomChange);
     softNavObserver.observe(searchContainer, { childList: true, subtree: false });
+  }
+
+  // Watch sidebar separately — Amazon replaces its children when filters are clicked
+  if (sidebarContainer && sidebarContainer !== searchContainer) {
+    sidebarNavObserver = new MutationObserver(handleDomChange);
+    sidebarNavObserver.observe(sidebarContainer, { childList: true, subtree: true });
   }
 }
 
@@ -301,6 +322,10 @@ function cleanupSoftNavigation(): void {
   if (softNavObserver) {
     softNavObserver.disconnect();
     softNavObserver = null;
+  }
+  if (sidebarNavObserver) {
+    sidebarNavObserver.disconnect();
+    sidebarNavObserver = null;
   }
 }
 

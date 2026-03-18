@@ -28,6 +28,25 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     periodInMinutes: WATCHLIST_CHECK_INTERVAL_MINUTES,
   });
 
+  // Show extension icon only on Amazon pages
+  chrome.declarativeContent.onPageChanged.removeRules(undefined, () => {
+    const amazonDomains = [
+      "www.amazon.com", "www.amazon.co.uk", "www.amazon.ca",
+      "www.amazon.de", "www.amazon.fr", "www.amazon.it",
+      "www.amazon.es", "www.amazon.in", "www.amazon.co.jp",
+      "www.amazon.com.au",
+    ];
+    const rules = amazonDomains.map((host) => ({
+      conditions: [
+        new chrome.declarativeContent.PageStateMatcher({
+          pageUrl: { hostEquals: host, schemes: ["https"] },
+        }),
+      ],
+      actions: [new chrome.declarativeContent.ShowAction()],
+    }));
+    chrome.declarativeContent.onPageChanged.addRules(rules);
+  });
+
   // Perform initial allowlist refresh
   if (details.reason === "install" || details.reason === "update") {
     const success = await refreshAllowlistFromRemote();
