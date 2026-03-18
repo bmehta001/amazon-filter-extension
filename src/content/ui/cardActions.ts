@@ -219,14 +219,22 @@ export function injectCardActions(
       saveBtn.style.position = "relative";
       saveBtn.appendChild(dropdown);
 
-      // Close dropdown on outside click
-      const closeHandler = (ev: MouseEvent) => {
-        if (!dropdown.contains(ev.target as Node)) {
-          dropdown.remove();
-          document.removeEventListener("click", closeHandler);
-        }
+      // Close dropdown on outside click — use AbortController for cleanup
+      const abortCtrl = new AbortController();
+      const cleanup = () => {
+        dropdown.remove();
+        abortCtrl.abort();
       };
-      setTimeout(() => document.addEventListener("click", closeHandler), 0);
+      setTimeout(() => {
+        document.addEventListener("click", (ev) => {
+          if (!dropdown.contains(ev.target as Node)) cleanup();
+        }, { signal: abortCtrl.signal });
+        // Also clean up if dropdown is removed from DOM by other means
+        const obs = new MutationObserver(() => {
+          if (!dropdown.isConnected) { abortCtrl.abort(); obs.disconnect(); }
+        });
+        obs.observe(saveBtn, { childList: true });
+      }, 0);
     });
     container.appendChild(saveBtn);
   }

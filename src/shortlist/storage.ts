@@ -39,6 +39,15 @@ const STORAGE_KEY = "bas_shortlists";
 const MAX_LISTS = 20;
 const MAX_ITEMS_PER_LIST = 50;
 
+/** Serializes all storage operations to prevent read-modify-write races. */
+let operationQueue: Promise<void> = Promise.resolve();
+
+function serialized<T>(fn: () => Promise<T>): Promise<T> {
+  const op = operationQueue.then(fn, fn); // run even if prior op rejected
+  operationQueue = op.then(() => {}, () => {}); // swallow for queue chain
+  return op;
+}
+
 /** Load all shortlists from chrome.storage.sync. */
 export async function loadShortlists(): Promise<Shortlist[]> {
   return new Promise((resolve) => {
@@ -69,75 +78,85 @@ async function saveShortlists(lists: Shortlist[]): Promise<void> {
 
 /** Create a new empty shortlist. */
 export async function createShortlist(name: string): Promise<Shortlist> {
-  const lists = await loadShortlists();
+  return serialized(async () => {
+    const lists = await loadShortlists();
 
-  if (lists.some((l) => l.name === name)) {
-    throw new Error(`Shortlist "${name}" already exists`);
-  }
-  if (lists.length >= MAX_LISTS) {
-    throw new Error(`Maximum of ${MAX_LISTS} shortlists reached`);
-  }
+    if (lists.some((l) => l.name === name)) {
+      throw new Error(`Shortlist "${name}" already exists`);
+    }
+    if (lists.length >= MAX_LISTS) {
+      throw new Error(`Maximum of ${MAX_LISTS} shortlists reached`);
+    }
 
-  const now = Date.now();
-  const list: Shortlist = { name, items: [], createdAt: now, updatedAt: now };
-  lists.push(list);
-  await saveShortlists(lists);
-  return list;
+    const now = Date.now();
+    const list: Shortlist = { name, items: [], createdAt: now, updatedAt: now };
+    lists.push(list);
+    await saveShortlists(lists);
+    return list;
+  });
 }
 
 /** Delete a shortlist by name. */
 export async function deleteShortlist(name: string): Promise<void> {
-  const lists = await loadShortlists();
-  await saveShortlists(lists.filter((l) => l.name !== name));
+  return serialized(async () => {
+    const lists = await loadShortlists();
+    await saveShortlists(lists.filter((l) => l.name !== name));
+  });
 }
 
 /** Rename a shortlist. */
 export async function renameShortlist(oldName: string, newName: string): Promise<void> {
-  const lists = await loadShortlists();
+  return serialized(async () => {
+    const lists = await loadShortlists();
 
-  if (lists.some((l) => l.name === newName)) {
-    throw new Error(`Shortlist "${newName}" already exists`);
-  }
+    if (lists.some((l) => l.name === newName)) {
+      throw new Error(`Shortlist "${newName}" already exists`);
+    }
 
-  const list = lists.find((l) => l.name === oldName);
-  if (!list) {
-    throw new Error(`Shortlist "${oldName}" not found`);
-  }
+    const list = lists.find((l) => l.name === oldName);
+    if (!list) {
+      throw new Error(`Shortlist "${oldName}" not found`);
+    }
 
-  list.name = newName;
-  list.updatedAt = Date.now();
-  await saveShortlists(lists);
+    list.name = newName;
+    list.updatedAt = Date.now();
+    await saveShortlists(lists);
+  });
 }
 
 /** Add an item to a shortlist (skips duplicates by ASIN). */
 export async function addToShortlist(listName: string, item: ShortlistItem): Promise<void> {
-  const lists = await loadShortlists();
-  const list = lists.find((l) => l.name === listName);
-  if (!list) {
-    throw new Error(`Shortlist "${listName}" not found`);
-  }
+  return serialized(async () => {
+    const lists = await loadShortlists();
+    const list = lists.find((l) => l.name === listName);
+    if (!list) {
+      throw new Error(`Shortlist "${listName}" not found`);
+    }
 
-  // Skip duplicate ASINs
-  if (list.items.some((i) => i.asin === item.asin)) return;
+    // Skip duplicate ASINs
+    if (list.items.some((i) => i.asin === item.asin)) return;
 
-  if (list.items.length >= MAX_ITEMS_PER_LIST) {
-    throw new Error(`Maximum of ${MAX_ITEMS_PER_LIST} items per shortlist reached`);
-  }
+    if (list.items.length >= MAX_ITEMS_PER_LIST) {
+      throw new Error(`Maximum of ${MAX_ITEMS_PER_LIST} items per shortlist reached`);
+    }
 
-  list.items.push({ ...item, title: item.title.slice(0, 120) });
-  list.updatedAt = Date.now();
-  await saveShortlists(lists);
+    list.items.push({ ...item, title: item.title.slice(0, 120) });
+    list.updatedAt = Date.now();
+    await saveShortlists(lists);
+  });
 }
 
 /** Remove an item from a shortlist by ASIN. */
 export async function removeFromShortlist(listName: string, asin: string): Promise<void> {
-  const lists = await loadShortlists();
-  const list = lists.find((l) => l.name === listName);
-  if (!list) return;
+  return serialized(async () => {
+    const lists = await loadShortlists();
+    const list = lists.find((l) => l.name === listName);
+    if (!list) return;
 
-  list.items = list.items.filter((i) => i.asin !== asin);
-  list.updatedAt = Date.now();
-  await saveShortlists(lists);
+    list.items = list.items.filter((i) => i.asin !== asin);
+    list.updatedAt = Date.now();
+    await saveShortlists(lists);
+  });
 }
 
 /** Return names of all shortlists that contain the given ASIN. */

@@ -277,6 +277,10 @@ function watchForSoftNavigation(): void {
       // Always re-inject on soft navigation — Amazon replaces sidebar content
       // when its native filters are clicked, destroying our widgets
       resetOriginalOrder(); // clear stale sort tracking from previous page
+      // Clear enrichment caches from previous page to bound memory usage
+      brandMap.clear();
+      sellerMap.clear();
+      originMap.clear();
       void injectFilterBar().then(() => filterAllProducts());
     }
   }, CHECK_INTERVAL_MS);

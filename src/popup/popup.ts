@@ -395,7 +395,10 @@ function createWatchlistItemEl(item: WatchlistItem): HTMLElement {
 
   const prices = document.createElement("div");
   prices.className = "watchlist-prices";
-  const diff = item.lastKnownPrice - item.priceWhenAdded;
+  const safeLastPrice = Number.isFinite(item.lastKnownPrice) ? item.lastKnownPrice : 0;
+  const safeAddedPrice = Number.isFinite(item.priceWhenAdded) ? item.priceWhenAdded : 0;
+  const safeTarget = Number.isFinite(item.targetPrice) ? item.targetPrice : 0;
+  const diff = safeLastPrice - safeAddedPrice;
   const diffClass = diff < 0 ? "price-drop" : diff > 0 ? "price-up" : "";
   const diffText =
     diff < 0
@@ -403,10 +406,19 @@ function createWatchlistItemEl(item: WatchlistItem): HTMLElement {
       : diff > 0
         ? ` (↑ $${diff.toFixed(2)})`
         : "";
-  prices.innerHTML =
-    `Now: <strong>$${item.lastKnownPrice.toFixed(2)}</strong>` +
-    (diffText ? ` <span class="${diffClass}">${diffText}</span>` : "") +
-    ` · Target: $${item.targetPrice.toFixed(2)}`;
+
+  const nowLabel = document.createTextNode("Now: ");
+  const nowStrong = document.createElement("strong");
+  nowStrong.textContent = `$${safeLastPrice.toFixed(2)}`;
+  prices.appendChild(nowLabel);
+  prices.appendChild(nowStrong);
+  if (diffText) {
+    const diffSpan = document.createElement("span");
+    diffSpan.className = diffClass;
+    diffSpan.textContent = diffText;
+    prices.appendChild(diffSpan);
+  }
+  prices.appendChild(document.createTextNode(` · Target: $${safeTarget.toFixed(2)}`));
 
   info.appendChild(title);
   info.appendChild(prices);

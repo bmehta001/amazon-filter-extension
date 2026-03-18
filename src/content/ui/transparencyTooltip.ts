@@ -202,20 +202,39 @@ export function createTransparencyTooltip(
   // Page stats
   const statsDiv = document.createElement("div");
   statsDiv.className = "bas-tt-stats";
-  const hidden = pageStats.total - pageStats.visible;
-  statsDiv.innerHTML = `
-    <div class="bas-tt-stats-header">📊 Page summary</div>
-    <div>Showing ${pageStats.visible} of ${pageStats.total} products</div>
-    ${pageStats.hiddenSponsored > 0 ? `<div>Hidden: ${pageStats.hiddenSponsored} sponsored</div>` : ""}
-    ${pageStats.hiddenMinReviews > 0 ? `<div>Hidden: ${pageStats.hiddenMinReviews} low reviews</div>` : ""}
-    ${pageStats.hiddenMinRating > 0 ? `<div>Hidden: ${pageStats.hiddenMinRating} low rated</div>` : ""}
-    ${pageStats.hiddenPrice > 0 ? `<div>Hidden: ${pageStats.hiddenPrice} out of price range</div>` : ""}
-    ${pageStats.hiddenBrand > 0 ? `<div>Hidden: ${pageStats.hiddenBrand} excluded/untrusted brands</div>` : ""}
-    ${pageStats.hiddenKeyword > 0 ? `<div>Hidden: ${pageStats.hiddenKeyword} keyword matches</div>` : ""}
-    ${pageStats.hiddenSeller > 0 ? `<div>Hidden: ${pageStats.hiddenSeller} seller filtered</div>` : ""}
-    ${pageStats.hiddenDedup > 0 ? `<div>Hidden: ${pageStats.hiddenDedup} duplicates</div>` : ""}
-    ${hidden === 0 ? "<div>No products filtered out</div>" : ""}
-  `.trim();
+  const hidden = Number(pageStats.total) - Number(pageStats.visible);
+
+  const statsHeader = document.createElement("div");
+  statsHeader.className = "bas-tt-stats-header";
+  statsHeader.textContent = "📊 Page summary";
+  statsDiv.appendChild(statsHeader);
+
+  const summaryLine = document.createElement("div");
+  summaryLine.textContent = `Showing ${Number(pageStats.visible)} of ${Number(pageStats.total)} products`;
+  statsDiv.appendChild(summaryLine);
+
+  const statEntries: [number, string][] = [
+    [pageStats.hiddenSponsored, "sponsored"],
+    [pageStats.hiddenMinReviews, "low reviews"],
+    [pageStats.hiddenMinRating, "low rated"],
+    [pageStats.hiddenPrice, "out of price range"],
+    [pageStats.hiddenBrand, "excluded/untrusted brands"],
+    [pageStats.hiddenKeyword, "keyword matches"],
+    [pageStats.hiddenSeller, "seller filtered"],
+    [pageStats.hiddenDedup, "duplicates"],
+  ];
+  for (const [count, label] of statEntries) {
+    if (Number(count) > 0) {
+      const line = document.createElement("div");
+      line.textContent = `Hidden: ${Number(count)} ${label}`;
+      statsDiv.appendChild(line);
+    }
+  }
+  if (hidden === 0) {
+    const noFilter = document.createElement("div");
+    noFilter.textContent = "No products filtered out";
+    statsDiv.appendChild(noFilter);
+  }
   tooltip.appendChild(statsDiv);
 
   wrapper.appendChild(tooltip);
