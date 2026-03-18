@@ -20,6 +20,7 @@ import { computeDealScore } from "./dealScoring";
 import { sortProducts, resetOriginalOrder } from "./sorting";
 import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } from "./ui/transparencyTooltip";
 import type { PageStats } from "./ui/transparencyTooltip";
+import { tryShowFeatureTour, TOUR_STYLES } from "./ui/featureTour";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
 import { findDuplicates } from "./dedup";
@@ -27,11 +28,28 @@ import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
+import { generateReviewSummary } from "../review/summary";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
 // CSS classes for product card visual states
+const REVIEW_SUMMARY_STYLES = `
+  .bas-review-summary {
+    font-size: 11px;
+    color: #565959;
+    padding: 3px 0;
+    line-height: 1.4;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bas-review-summary:hover {
+    white-space: normal;
+  }
+`;
+
 const GLOBAL_STYLES = `
   .bas-hidden { display: none !important; }
   .bas-dimmed { opacity: 0.4; transition: opacity 0.2s; }
@@ -42,6 +60,8 @@ ${REVIEW_INSIGHTS_STYLES}
 ${PRICE_SPARKLINE_STYLES}
 ${DEAL_BADGE_STYLES}
 ${TRANSPARENCY_STYLES}
+${REVIEW_SUMMARY_STYLES}
+${TOUR_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -151,6 +171,9 @@ async function main(): Promise<void> {
 
   // Initial filtering pass
   await filterAllProducts();
+
+  // Show onboarding feature tour on first visit (non-blocking)
+  void tryShowFeatureTour();
 
   // Start background pagination if viewing multiple pages (not on Haul — Haul uses infinite scroll)
   if (!isHaulMode && currentFilters.totalPages > 1) {
@@ -782,6 +805,12 @@ function queueReviewAnalysis(products: Product[]): void {
             const result = await applyFilters(product, currentFilters);
             applyFilterResult(product.element, result);
           }
+
+          // Inject review summary (pros/cons) if we have enough reviews
+          const summary = generateReviewSummary(reviewData.reviews);
+          if (summary?.oneLiner) {
+            injectReviewSummary(product.element, summary.oneLiner);
+          }
         }
       } catch (err) {
         console.warn("[BAS] Review analysis error:", err);
@@ -914,6 +943,22 @@ function updateOriginDisplay(product: Product): void {
   const actionBar = product.element.querySelector(".bas-card-actions");
   if (actionBar) {
     actionBar.appendChild(badge);
+  }
+}
+
+/** Inject a one-line review summary (pros/cons) on a product card. */
+function injectReviewSummary(card: HTMLElement, oneLiner: string): void {
+  if (card.querySelector(".bas-review-summary")) return;
+  const el = document.createElement("div");
+  el.className = "bas-review-summary";
+  el.textContent = oneLiner;
+  el.title = oneLiner; // full text on hover
+  // Insert after review badge or action bar
+  const anchor = card.querySelector(".bas-review-badge, .bas-card-actions, h2");
+  if (anchor) {
+    anchor.parentElement?.insertBefore(el, anchor.nextSibling);
+  } else {
+    card.appendChild(el);
   }
 }
 

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to Better Amazon Search</title>
+  <link rel="stylesheet" href="onboarding.css" />
+</head>
+<body>
+  <!-- Hero -->
+  <section class="hero">
+    <h1 class="hero-title">🔍 Welcome to Better Amazon Search</h1>
+    <p class="hero-tagline">Shop smarter with powerful filters, deal scores, and review analysis</p>
+  </section>
+
+  <!-- Feature Cards -->
+  <section class="features">
+    <h2 class="features-title">What You Get</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">📈</span>
+        <div class="feature-name">Price Trend Charts</div>
+        <div class="feature-desc">See price history at a glance without opening product pages</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🛡️</span>
+        <div class="feature-name">Review Authenticity</div>
+        <div class="feature-desc">Detect fake reviews and suspicious rating patterns</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🏪</span>
+        <div class="feature-name">Seller &amp; Origin</div>
+        <div class="feature-desc">Filter by seller type and country of origin</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔄</span>
+        <div class="feature-name">Smart Sort</div>
+        <div class="feature-desc">Sort results by value, trending, or deal score</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📌</span>
+        <div class="feature-name">Product Shortlists</div>
+        <div class="feature-desc">Save and compare products across searches</div>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🏷️</span>
+        <div class="feature-name">Deal Scores</div>
+        <div class="feature-desc">Instantly spot great deals with color-coded badges</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Setup -->
+  <section class="setup">
+    <h2 class="setup-title">⚡ Quick Setup</h2>
+    <p class="setup-desc">Choose how much data the extension should fetch in the background</p>
+    <div class="preset-group" id="preset-group">
+      <button class="preset-btn" data-preset="low">
+        <span class="preset-icon">🔋</span>
+        <span class="preset-label">Low</span>
+        <span class="preset-hint">Minimal data usage — basic filters only</span>
+      </button>
+      <button class="preset-btn" data-preset="balanced">
+        <span class="preset-icon">⚖️</span>
+        <span class="preset-label">Balanced</span>
+        <span class="preset-hint">Charts, badges &amp; detail preloading</span>
+      </button>
+      <button class="preset-btn" data-preset="high">
+        <span class="preset-icon">🚀</span>
+        <span class="preset-label">High</span>
+        <span class="preset-hint">All features including ML analysis</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <button class="cta-btn" id="start-btn">🛒 Start Shopping</button>
+  </section>
+
+  <script type="module" src="onboarding.ts"></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import { refreshAllowlistFromRemote } from "../brand/allowlist";
 import { checkWatchlistPrices, WATCHLIST_ALARM_NAME, WATCHLIST_CHECK_INTERVAL_MINUTES } from "../watchlist/checker";
+import { markWelcomeSeen } from "../onboarding/state";
 
 const ALARM_NAME = "refreshBrandAllowlist";
 const REFRESH_INTERVAL_MINUTES = 1440; // 24 hours
@@ -51,6 +52,12 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "install" || details.reason === "update") {
     const success = await refreshAllowlistFromRemote();
     console.log("[BAS] Initial allowlist refresh:", success ? "success" : "failed (will use bundled)");
+  }
+
+  // Open onboarding welcome page on first install
+  if (details.reason === "install") {
+    await markWelcomeSeen();
+    chrome.tabs.create({ url: chrome.runtime.getURL("src/onboarding/onboarding.html") });
   }
 });
 
