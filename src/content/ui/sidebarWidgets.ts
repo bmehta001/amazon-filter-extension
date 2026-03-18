@@ -22,7 +22,6 @@ import sidebarWidgetStyles from "./sidebarWidgets.css?inline";
 export interface DistributedCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
-  onSortByReviews: () => void;
   onAmazonOnly: () => void;
 }
 
@@ -148,10 +147,38 @@ export function createDistributedFilters(
 
     // Quick actions
     const actionsGroup = wGroup("", "");
-    const sortBtn = wButton("Sort by Reviews", "Re-sort results by review count", () => callbacks.onSortByReviews());
     const sellerBtn = wButton("Amazon Only", "Show only products sold by Amazon", () => callbacks.onAmazonOnly());
-    actionsGroup.append(sortBtn, sellerBtn);
+    actionsGroup.append(sellerBtn);
     container.appendChild(actionsGroup);
+
+    // Sort
+    const sortGroup = wGroup("Sort Results:", "Re-sort visible products on this page. This sorts within current results, not all of Amazon.");
+    refs.sortSelect = document.createElement("select");
+    refs.sortSelect.className = "bas-w-select";
+    const sortOptions: [string, string][] = [
+      ["default", "Amazon Default"],
+      ["reviews", "Most Reviews"],
+      ["value", "Best Value (rating × reviews / price)"],
+      ["trending", "Trending (popular + high rated)"],
+      ["deal-score", "Best Deals"],
+      ["price-low", "Price: Low → High"],
+      ["price-high", "Price: High → Low"],
+    ];
+    for (const [val, label] of sortOptions) {
+      const opt = document.createElement("option");
+      opt.value = val;
+      opt.textContent = label;
+      if (val === initialState.sortBy) opt.selected = true;
+      refs.sortSelect.appendChild(opt);
+    }
+    refs.sortSelect.addEventListener("change", emitChange);
+    sortGroup.appendChild(refs.sortSelect);
+
+    const sortNote = document.createElement("div");
+    sortNote.style.cssText = "font-size:10px;color:#888;margin-top:2px;";
+    sortNote.id = "bas-sort-note";
+    sortGroup.appendChild(sortNote);
+    container.appendChild(sortGroup);
 
     // Query Builder
     const qbGroup = wGroup("Query Builder:", "Apply exclude keywords as -term modifiers in the Amazon search box");
@@ -362,6 +389,24 @@ export function updateDistributedStats(
 }
 
 /**
+ * Update the processing state indicator in the main distributed widget.
+ */
+export function updateProcessingState(host: HTMLElement, state: "processing" | "done", detail?: string): void {
+  const shadow = host.shadowRoot;
+  if (!shadow) return;
+  const el = shadow.getElementById("bas-stats");
+  if (!el) return;
+
+  if (state === "processing") {
+    el.textContent = detail ?? "⏳ Processing filters...";
+    el.style.color = "#c45500"; // Amazon orange
+  } else {
+    el.style.color = ""; // Reset to default
+    // The stats text will be updated by updateDistributedStats
+  }
+}
+
+/**
  * Update the prefetch status text in the main distributed widget.
  */
 export function updateDistributedPrefetchStatus(host: HTMLElement, text: string): void {
@@ -369,6 +414,21 @@ export function updateDistributedPrefetchStatus(host: HTMLElement, text: string)
   if (!shadow) return;
   const el = shadow.getElementById("bas-prefetch-status");
   if (el) el.textContent = text;
+}
+
+/**
+ * Update the sort note showing how many products were sorted.
+ */
+export function updateSortNote(host: HTMLElement, sortBy: string, visibleCount: number): void {
+  const shadow = host.shadowRoot;
+  if (!shadow) return;
+  const el = shadow.getElementById("bas-sort-note");
+  if (!el) return;
+  if (sortBy === "default") {
+    el.textContent = "";
+  } else {
+    el.textContent = `⚠️ Sorted within current page (${visibleCount} visible products)`;
+  }
 }
 
 // ── Sidebar section detection ─────────────────────────────────────────
@@ -477,6 +537,7 @@ interface WidgetRefs {
   dedupCheckboxes: Map<string, HTMLInputElement>;
   pagesSelect: HTMLSelectElement;
   qbCb: HTMLInputElement;
+  sortSelect: HTMLSelectElement;
   // Review widget
   ratingInput: HTMLInputElement;
   reviewSlider: HTMLInputElement;
@@ -516,6 +577,7 @@ function gatherState(refs: WidgetRefs, state: FilterState): void {
   state.priceMax = refs.priceMax?.value ? parseFloat(refs.priceMax.value) : null;
   state.brandMode = (refs.brandSelect?.value as BrandMode) ?? state.brandMode;
   state.sellerFilter = (refs.sellerSelect?.value as SellerFilter) ?? state.sellerFilter;
+  state.sortBy = (refs.sortSelect?.value as FilterState["sortBy"]) ?? state.sortBy;
 
   // Collect excluded brands from the integrated UI or fallback textarea
   const excluded: string[] = [];

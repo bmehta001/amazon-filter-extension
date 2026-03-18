@@ -1,5 +1,5 @@
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged, loadPreferences, onPreferencesChanged } from "../util/storage";
-import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildSortByReviewsUrl, buildAmazonOnlyUrl } from "../util/url";
+import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildAmazonOnlyUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { createRateLimitedDetailFetcher } from "../brand/fetcher";
@@ -10,13 +10,16 @@ import { extractAllProducts, extractProduct, getProductCards, extractBrandCandid
 import { extractAllHaulProducts, extractHaulProduct, getHaulProductCards } from "./haulExtractor";
 import { applyFilters, applyFilterResult, markTrusted } from "./filters";
 import { createFilterBar, updateStats, updatePrefetchStatus } from "./ui/filterBar";
-import { createDistributedFilters, updateDistributedStats, updateDistributedPrefetchStatus, cleanupDistributedFilters } from "./ui/sidebarWidgets";
+import { createDistributedFilters, updateDistributedStats, updateDistributedPrefetchStatus, updateProcessingState, updateSortNote, cleanupDistributedFilters } from "./ui/sidebarWidgets";
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
 import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
 import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
 import { computeDealScore } from "./dealScoring";
+import { sortProducts, resetOriginalOrder } from "./sorting";
+import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } from "./ui/transparencyTooltip";
+import type { PageStats } from "./ui/transparencyTooltip";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
 import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
 import { findDuplicates } from "./dedup";
@@ -38,6 +41,7 @@ ${REVIEW_BADGE_STYLES}
 ${REVIEW_INSIGHTS_STYLES}
 ${PRICE_SPARKLINE_STYLES}
 ${DEAL_BADGE_STYLES}
+${TRANSPARENCY_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -193,7 +197,6 @@ async function injectFilterBar(): Promise<void> {
   const filterCallbacks = {
     onFilterChange: handleFilterChange,
     onQueryBuilderApply: handleQueryBuilderApply,
-    onSortByReviews: handleSortByReviews,
     onAmazonOnly: handleAmazonOnly,
   };
 
@@ -271,6 +274,7 @@ function watchForSoftNavigation(): void {
 
       // Always re-inject on soft navigation — Amazon replaces sidebar content
       // when its native filters are clicked, destroying our widgets
+      resetOriginalOrder(); // clear stale sort tracking from previous page
       void injectFilterBar().then(() => filterAllProducts());
     }
   }, CHECK_INTERVAL_MS);
@@ -333,6 +337,10 @@ function cleanupSoftNavigation(): void {
  * Apply filters to all products on the page.
  */
 async function filterAllProducts(): Promise<void> {
+  if (filterBarHost) {
+    updateProcessingState(filterBarHost, "processing");
+  }
+
   const products = isHaulMode ? extractAllHaulProducts() : extractAllProducts();
   let shown = 0;
 
@@ -384,7 +392,22 @@ async function filterAllProducts(): Promise<void> {
     }
   }
 
-  // Third pass: apply results to DOM
+  // Third pass: apply results to DOM, track page stats for transparency
+  const pageStats: PageStats = {
+    total: products.length,
+    visible: 0,
+    hiddenSponsored: 0,
+    hiddenMinReviews: 0,
+    hiddenMinRating: 0,
+    hiddenPrice: 0,
+    hiddenBrand: 0,
+    hiddenKeyword: 0,
+    hiddenSeller: 0,
+    hiddenDedup: 0,
+  };
+  const dealScoreMap = new Map<string, number>();
+  const visibleProducts: Product[] = [];
+
   for (let i = 0; i < products.length; i++) {
     const product = products[i];
     let result = filterResults[i];
@@ -392,12 +415,25 @@ async function filterAllProducts(): Promise<void> {
     // Override to hide if it's a duplicate variant
     if (dedupSet.has(i)) {
       result = "hide";
+      pageStats.hiddenDedup++;
+    } else if (result === "hide") {
+      // Track why hidden (approximate from filter state)
+      if (currentFilters.hideSponsored && product.isSponsored) pageStats.hiddenSponsored++;
+      else if (currentFilters.minReviews > 0 && product.reviewCount < currentFilters.minReviews) pageStats.hiddenMinReviews++;
+      else if (currentFilters.minRating != null && product.rating < currentFilters.minRating) pageStats.hiddenMinRating++;
+      else if (currentFilters.priceMin != null && product.price != null && product.price < currentFilters.priceMin) pageStats.hiddenPrice++;
+      else if (currentFilters.priceMax != null && product.price != null && product.price > currentFilters.priceMax) pageStats.hiddenPrice++;
+      else if (currentFilters.excludedBrands.some(b => b.toLowerCase() === product.brand.toLowerCase())) pageStats.hiddenBrand++;
+      else if (currentFilters.brandMode === "trusted-only" || currentFilters.brandMode === "hide") pageStats.hiddenBrand++;
+      else if (currentFilters.excludeTokens.some(t => product.title.toLowerCase().includes(t.toLowerCase()))) pageStats.hiddenKeyword++;
+      else if (currentFilters.sellerFilter !== "any") pageStats.hiddenSeller++;
     }
 
     applyFilterResult(product.element, result);
 
     if (result !== "hide") {
       shown++;
+      visibleProducts.push(product);
     }
 
     if (isAllowlisted(product.brand)) {
@@ -417,14 +453,36 @@ async function filterAllProducts(): Promise<void> {
       const dealScore = computeDealScore(product);
       if (dealScore) {
         injectDealBadge(product.element, dealScore);
+        if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
       }
     }
+
+    // Inject transparency tooltip
+    const reasons = buildFilterReasons(product, currentFilters);
+    const filterResultObj = { action: result, reasons };
+    // Remove old tooltip if present
+    product.element.querySelector(".bas-transparency-wrapper")?.remove();
+    const tooltipEl = createTransparencyTooltip(product, filterResultObj, pageStats);
+    const titleArea = product.element.querySelector("h2");
+    if (titleArea) {
+      titleArea.parentElement?.appendChild(tooltipEl);
+    }
+  }
+
+  pageStats.visible = shown;
+
+  // Apply client-side sort if not default
+  if (currentFilters.sortBy && currentFilters.sortBy !== "default") {
+    sortProducts(visibleProducts, currentFilters.sortBy, dealScoreMap);
+  } else {
+    sortProducts(visibleProducts, "default");
   }
 
   // Update stats
   if (filterBarHost) {
     if (isDistributedMode) {
       updateDistributedStats(filterBarHost, shown, products.length);
+      updateSortNote(filterBarHost, currentFilters.sortBy ?? "default", shown);
     } else {
       updateStats(filterBarHost, shown, products.length);
     }
@@ -437,7 +495,17 @@ async function filterAllProducts(): Promise<void> {
 
   // Queue brand + seller enrichment for products with ASINs (non-blocking)
   if (currentPrefs.preloadDetails) {
+    if (filterBarHost) {
+      updateProcessingState(filterBarHost, "processing", "⏳ Enriching product details...");
+    }
     queueDetailEnrichment(products);
+    if (filterBarHost) {
+      updateProcessingState(filterBarHost, "done");
+    }
+  }
+
+  if (filterBarHost) {
+    updateProcessingState(filterBarHost, "done");
   }
 }
 
@@ -536,13 +604,6 @@ function handleQueryBuilderApply(excludeTokens: string[]): void {
     searchInput.focus();
     searchInput.select();
   }
-}
-
-/**
- * Navigate to sort-by-review-count URL.
- */
-function handleSortByReviews(): void {
-  window.location.href = buildSortByReviewsUrl();
 }
 
 /**

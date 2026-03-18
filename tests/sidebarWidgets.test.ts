@@ -54,7 +54,6 @@ function createMockSidebar(sections: string[]): HTMLElement {
 const noopCallbacks = {
   onFilterChange: () => {},
   onQueryBuilderApply: () => {},
-  onSortByReviews: () => {},
   onAmazonOnly: () => {},
 };
 

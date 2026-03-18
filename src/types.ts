@@ -98,7 +98,11 @@ export interface FilterState {
   totalPages: number;
   networkUsage: NetworkUsage;
   sellerFilter: SellerFilter;
+  sortBy: SortCriteria;
 }
+
+/** Sort criteria for client-side product sorting. */
+export type SortCriteria = "default" | "reviews" | "value" | "trending" | "deal-score" | "price-low" | "price-high";
 
 /** Shape of data stored in chrome.storage.sync. */
 export interface StorageData {
@@ -184,6 +188,7 @@ export const DEFAULT_FILTERS: FilterState = {
   totalPages: 1,
   networkUsage: "auto",
   sellerFilter: "any",
+  sortBy: "default",
 };
 
 /** Default storage data. */

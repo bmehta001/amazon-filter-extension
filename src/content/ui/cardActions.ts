@@ -2,6 +2,8 @@ import type { Product } from "../../types";
 import { buildCccUrl } from "../../util/url";
 import { trustBrand, blockBrand } from "../../util/storage";
 import { addToWatchlist, isWatched } from "../../watchlist/storage";
+import { loadShortlists, addToShortlist, createShortlist, isInAnyShortlist } from "../../shortlist/storage";
+import type { ShortlistItem } from "../../shortlist/storage";
 
 /**
  * Inject per-card action buttons onto a product card.
@@ -107,6 +109,126 @@ export function injectCardActions(
       }
     });
     container.appendChild(watchBtn);
+  }
+
+  // Save to shortlist button (for products with ASIN)
+  if (product.asin) {
+    const asin = product.asin;
+    const saveBtn = createButton("📌 Save", "Save to a shortlist for later comparison");
+
+    // Check if already in any list
+    isInAnyShortlist(asin).then((listNames) => {
+      if (listNames.length > 0) {
+        saveBtn.textContent = `📌 In ${listNames[0]}`;
+        saveBtn.style.background = "#fef3e2";
+      }
+    }).catch(() => { /* ignore */ });
+
+    saveBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Show a quick dropdown to pick or create a list
+      const existing = saveBtn.parentElement?.querySelector(".bas-shortlist-dropdown");
+      if (existing) { existing.remove(); return; }
+
+      const dropdown = document.createElement("div");
+      dropdown.className = "bas-shortlist-dropdown";
+      dropdown.style.cssText = `
+        position: absolute; z-index: 9999; background: #fff;
+        border: 1px solid #d5d9d9; border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15); padding: 6px;
+        min-width: 160px; font-size: 12px; margin-top: 2px;
+      `;
+
+      try {
+        const lists = await loadShortlists();
+        if (lists.length === 0) {
+          // No lists yet — create a default one
+          await createShortlist("My Research");
+          lists.push({ name: "My Research", items: [], createdAt: Date.now(), updatedAt: Date.now() });
+        }
+
+        for (const list of lists) {
+          const opt = document.createElement("div");
+          opt.textContent = `📋 ${list.name} (${list.items.length})`;
+          opt.style.cssText = "padding:4px 8px;cursor:pointer;border-radius:3px;";
+          opt.addEventListener("mouseenter", () => { opt.style.background = "#f0f0f0"; });
+          opt.addEventListener("mouseleave", () => { opt.style.background = ""; });
+          opt.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            const item: ShortlistItem = {
+              asin,
+              title: product.title,
+              brand: product.brand,
+              price: product.price,
+              rating: product.rating,
+              reviewCount: product.reviewCount,
+              url: `https://${window.location.hostname}/dp/${asin}`,
+              addedAt: Date.now(),
+              reviewQuality: product.reviewQuality,
+            };
+            try {
+              await addToShortlist(list.name, item);
+              saveBtn.textContent = `📌 In ${list.name}`;
+              saveBtn.style.background = "#fef3e2";
+            } catch (err) {
+              saveBtn.textContent = "⚠ Error";
+            }
+            dropdown.remove();
+          });
+          dropdown.appendChild(opt);
+        }
+
+        // "+ New List" option
+        const newOpt = document.createElement("div");
+        newOpt.textContent = "➕ New List...";
+        newOpt.style.cssText = "padding:4px 8px;cursor:pointer;border-radius:3px;color:#0066c0;border-top:1px solid #eee;margin-top:4px;padding-top:6px;";
+        newOpt.addEventListener("mouseenter", () => { newOpt.style.background = "#f0f0f0"; });
+        newOpt.addEventListener("mouseleave", () => { newOpt.style.background = ""; });
+        newOpt.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const name = prompt("Enter list name:");
+          if (name?.trim()) {
+            createShortlist(name.trim()).then(() => {
+              const item: ShortlistItem = {
+                asin,
+                title: product.title,
+                brand: product.brand,
+                price: product.price,
+                rating: product.rating,
+                reviewCount: product.reviewCount,
+                url: `https://${window.location.hostname}/dp/${asin}`,
+                addedAt: Date.now(),
+              };
+              return addToShortlist(name.trim(), item);
+            }).then(() => {
+              saveBtn.textContent = `📌 In ${name!.trim()}`;
+              saveBtn.style.background = "#fef3e2";
+            }).catch(() => {
+              saveBtn.textContent = "⚠ Error";
+            });
+          }
+          dropdown.remove();
+        });
+        dropdown.appendChild(newOpt);
+      } catch {
+        dropdown.textContent = "Failed to load lists";
+      }
+
+      saveBtn.style.position = "relative";
+      saveBtn.appendChild(dropdown);
+
+      // Close dropdown on outside click
+      const closeHandler = (ev: MouseEvent) => {
+        if (!dropdown.contains(ev.target as Node)) {
+          dropdown.remove();
+          document.removeEventListener("click", closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener("click", closeHandler), 0);
+    });
+    container.appendChild(saveBtn);
   }
 
   // Insert after the title area or at the bottom of the card

@@ -7,7 +7,6 @@ import { DEDUP_CATEGORIES } from "../dedup";
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
-  onSortByReviews: () => void;
   onAmazonOnly: () => void;
 }
 
@@ -408,13 +407,6 @@ export function createFilterBar(
 
   // ── Sort & Seller helpers ──────────────────────────────────────────
   const helpersGroup = group("");
-  const sortBtn = document.createElement("button");
-  sortBtn.className = "bas-btn";
-  sortBtn.textContent = "Sort by Reviews";
-  sortBtn.title = "Re-sort search results by number of reviews (navigates to a new URL)";
-  sortBtn.addEventListener("click", () => callbacks.onSortByReviews());
-  helpersGroup.appendChild(sortBtn);
-
   const sellerBtn = document.createElement("button");
   sellerBtn.className = "bas-btn";
   sellerBtn.textContent = "Amazon Only";
@@ -454,6 +446,7 @@ export function createFilterBar(
         .map(([id, _]) => id),
       totalPages: Math.min(10, Math.max(1, parseInt(pagesSelect.value, 10) || 1)),
       networkUsage: "auto",
+      sortBy: "default",
     };
     callbacks.onFilterChange(state);
   }
