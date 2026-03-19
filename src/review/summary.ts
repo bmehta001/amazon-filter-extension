@@ -1,9 +1,10 @@
 /**
  * Review summary engine — extracts concise pros/cons from review text.
- * Uses keyword frequency analysis to identify what customers love and complain about.
+ * Can use raw keyword matching OR sentence-level TopicScores from categories.ts.
  */
 
-import type { ReviewData } from "./types";
+import type { ReviewData, TopicScore } from "./types";
+import { REVIEW_CATEGORIES } from "./categories";
 
 /** A summarized aspect mentioned across reviews. */
 export interface ReviewAspect {
@@ -15,6 +16,8 @@ export interface ReviewAspect {
   avgRating: number;
   /** Whether this is positive (≥3.5 avg) or negative (<3.5 avg). */
   sentiment: "positive" | "negative";
+  /** Trend indicator if available. */
+  trend?: "rising" | "falling" | "stable";
 }
 
 /** Generated summary for a product's reviews. */
@@ -53,8 +56,42 @@ const ASPECTS: { label: string; keywords: string[] }[] = [
 ];
 
 /**
- * Generate a review summary from a list of reviews.
- * Extracts the top 3 pros and top 2 cons.
+ * Generate a review summary from sentence-level TopicScores (preferred).
+ * Reuses the deeper analysis from categories.ts instead of re-scanning text.
+ */
+export function generateSummaryFromTopicScores(topicScores: TopicScore[]): ReviewSummary | null {
+  if (topicScores.length === 0) return null;
+
+  const categoryMeta = new Map(REVIEW_CATEGORIES.map((c) => [c.id, c]));
+
+  const allAspects: ReviewAspect[] = topicScores
+    .filter((ts) => ts.reviewMentions >= 1)
+    .map((ts) => ({
+      label: categoryMeta.get(ts.categoryId)?.label ?? ts.categoryId,
+      mentions: ts.reviewMentions,
+      avgRating: ts.avgRating,
+      sentiment: (ts.avgRating >= 3.5 ? "positive" : "negative") as "positive" | "negative",
+      trend: ts.trend,
+    }));
+
+  if (allAspects.length === 0) return null;
+
+  const pros = allAspects
+    .filter((a) => a.sentiment === "positive")
+    .sort((a, b) => b.mentions - a.mentions || b.avgRating - a.avgRating)
+    .slice(0, 3);
+
+  const cons = allAspects
+    .filter((a) => a.sentiment === "negative")
+    .sort((a, b) => b.mentions - a.mentions || a.avgRating - b.avgRating)
+    .slice(0, 2);
+
+  return { pros, cons, oneLiner: buildOneLiner(pros, cons) };
+}
+
+/**
+ * Generate a review summary from raw reviews (fallback).
+ * Extracts the top 3 pros and top 2 cons using keyword matching.
  */
 export function generateReviewSummary(reviews: ReviewData[]): ReviewSummary | null {
   if (reviews.length < 2) return null;
@@ -114,12 +151,18 @@ function buildOneLiner(pros: ReviewAspect[], cons: ReviewAspect[]): string {
   const parts: string[] = [];
 
   if (pros.length > 0) {
-    const proLabels = pros.map((p) => p.label).join(", ");
+    const proLabels = pros.map((p) => {
+      const trendIcon = p.trend === "rising" ? "↑" : p.trend === "falling" ? "↓" : "";
+      return p.label + trendIcon;
+    }).join(", ");
     parts.push(`👍 ${proLabels}`);
   }
 
   if (cons.length > 0) {
-    const conLabels = cons.map((c) => c.label).join(", ");
+    const conLabels = cons.map((c) => {
+      const trendIcon = c.trend === "rising" ? "↑" : c.trend === "falling" ? "↓" : "";
+      return c.label + trendIcon;
+    }).join(", ");
     parts.push(`👎 ${conLabels}`);
   }
 

@@ -14,6 +14,7 @@ import { createDistributedFilters, updateDistributedStats, updateDistributedPref
 import { injectCardActions } from "./ui/cardActions";
 import { injectReviewBadge, REVIEW_BADGE_STYLES } from "./ui/reviewBadge";
 import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsights";
+import { RADAR_CHART_STYLES } from "./ui/radarChart";
 import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
 import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
 import { computeDealScore } from "./dealScoring";
@@ -28,7 +29,7 @@ import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
-import { generateReviewSummary } from "../review/summary";
+import { generateReviewSummary, generateSummaryFromTopicScores } from "../review/summary";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
@@ -61,6 +62,7 @@ ${PRICE_SPARKLINE_STYLES}
 ${DEAL_BADGE_STYLES}
 ${TRANSPARENCY_STYLES}
 ${REVIEW_SUMMARY_STYLES}
+${RADAR_CHART_STYLES}
 ${TOUR_STYLES}
 `;
 
@@ -806,8 +808,10 @@ function queueReviewAnalysis(products: Product[]): void {
             applyFilterResult(product.element, result);
           }
 
-          // Inject review summary (pros/cons) if we have enough reviews
-          const summary = generateReviewSummary(reviewData.reviews);
+          // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
+          const summary = (insights.topicScores.length > 0)
+            ? generateSummaryFromTopicScores(insights.topicScores)
+            : generateReviewSummary(reviewData.reviews);
           if (summary?.oneLiner) {
             injectReviewSummary(product.element, summary.oneLiner);
           }

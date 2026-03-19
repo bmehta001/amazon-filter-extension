@@ -1,4 +1,7 @@
-import type { ReviewData, CategorizedReview, CategorySummary, ProductInsights } from "./types";
+import type {
+  ReviewData, CategorizedReview, CategorizedSentence,
+  CategorySummary, ProductInsights, TopicScore, TopicTrendWindow,
+} from "./types";
 
 /** Category definition type. */
 export interface ReviewCategory {
@@ -164,37 +167,123 @@ export const REVIEW_CATEGORIES: ReviewCategory[] = [
   },
 ];
 
-/** Categorize a single review into matching categories. */
+// ── Sentence Splitting ──────────────────────────────────────────────
+
+/**
+ * Split review text into sentences.
+ * Handles abbreviations (Mr., Dr., U.S., etc.), decimals, and ellipses.
+ */
+export function splitIntoSentences(text: string): string[] {
+  if (!text || text.trim().length === 0) return [];
+
+  // Protect common abbreviations and decimals from splitting
+  let processed = text
+    .replace(/\b(Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc|approx|Inc|Ltd|Co)\./gi, "$1\u0000")
+    .replace(/(\d)\./g, "$1\u0000")   // e.g., "4.5 stars"
+    .replace(/\.{2,}/g, "\u0001");     // ellipses → placeholder
+
+  // Split on sentence-ending punctuation followed by space or end-of-string
+  const raw = processed.split(/(?<=[.!?])\s+|(?<=[.!?])$/);
+
+  // Restore protected characters and clean up
+  return raw
+    .map((s) => s.replace(/\u0000/g, ".").replace(/\u0001/g, "...").trim())
+    .filter((s) => s.length > 0);
+}
+
+// ── Implied Rating Detection ────────────────────────────────────────
+
+/**
+ * Patterns that indicate "I would have rated higher except for [topic]"
+ * Returns the implied higher rating if detected, null otherwise.
+ */
+const IMPLIED_RATING_PATTERNS = [
+  // "would have given/said 5 stars except/but/if not for"
+  /would (?:have )?(?:given|said|rated|been)\s+(\d)\s*(?:stars?)?[\s,]*(?:except|but|if not for|were it not for|minus|other than)/i,
+  // "this is a 5 star product except for"
+  /(?:this is|it's|it is)\s+(?:a\s+)?(\d)\s*(?:star|\/5)[\s,]*(?:product|item)?[\s,]*(?:except|but|if not for|other than)/i,
+  // "I'd give 5 stars but"
+  /i'?d\s+(?:give|rate)\s+(?:it\s+)?(\d)\s*(?:stars?)?[\s,]*(?:but|except|if not for)/i,
+  // "5 stars if not for" / "would be 5 stars but"
+  /(?:would be|could be|should be)\s+(\d)\s*(?:stars?)?[\s,]*(?:but|except|if not for)/i,
+];
+
+/**
+ * Detect implied rating from "would have said X stars except for Y" patterns.
+ * Returns the implied rating (1-5) or null.
+ */
+export function detectImpliedRating(text: string): number | null {
+  for (const pattern of IMPLIED_RATING_PATTERNS) {
+    const match = text.match(pattern);
+    if (match) {
+      const rating = parseInt(match[1], 10);
+      if (rating >= 1 && rating <= 5) return rating;
+    }
+  }
+  return null;
+}
+
+// ── Sentence-Level Categorization ───────────────────────────────────
+
+/** Tag a single sentence with matching category IDs. */
+export function categorizeSentence(sentence: string): string[] {
+  const lower = sentence.toLowerCase();
+  const matched: string[] = [];
+  for (const cat of REVIEW_CATEGORIES) {
+    for (const kw of cat.keywords) {
+      if (lower.includes(kw)) {
+        matched.push(cat.id);
+        break;
+      }
+    }
+  }
+  return matched;
+}
+
+// ── Review-Level Categorization (using sentence decomposition) ──────
+
+/** Categorize a single review using sentence-level decomposition. */
 export function categorizeReview(review: ReviewData): CategorizedReview {
-  const lowerText = review.text.toLowerCase();
-  const matchCounts = new Map<string, number>();
+  const rawSentences = splitIntoSentences(review.text);
+  const totalSentences = Math.max(rawSentences.length, 1);
+  const weight = 1 / totalSentences;
 
-  for (const category of REVIEW_CATEGORIES) {
-    let count = 0;
-    for (const keyword of category.keywords) {
-      if (lowerText.includes(keyword)) {
-        count++;
-      }
+  const allCategories = new Set<string>();
+  const categoryCounts = new Map<string, number>();
+  const sentences: CategorizedSentence[] = [];
+
+  for (const sentText of rawSentences) {
+    let cats = categorizeSentence(sentText);
+    // Uncategorized sentences default to "product-quality"
+    if (cats.length === 0) {
+      cats = ["product-quality"];
     }
-    if (count > 0) {
-      matchCounts.set(category.id, count);
+    for (const c of cats) {
+      allCategories.add(c);
+      categoryCounts.set(c, (categoryCounts.get(c) ?? 0) + 1);
     }
+    sentences.push({ text: sentText, categories: cats, weight });
   }
 
-  const categories = Array.from(matchCounts.keys());
-
+  // Primary category = most sentence mentions
   let primaryCategory: string | null = null;
-  if (categories.length > 0) {
-    let maxCount = 0;
-    for (const [id, count] of matchCounts) {
-      if (count > maxCount) {
-        maxCount = count;
-        primaryCategory = id;
-      }
+  let maxCount = 0;
+  for (const [id, count] of categoryCounts) {
+    if (count > maxCount) {
+      maxCount = count;
+      primaryCategory = id;
     }
   }
 
-  return { review, categories, primaryCategory };
+  const impliedRating = detectImpliedRating(review.text);
+
+  return {
+    review,
+    categories: Array.from(allCategories),
+    primaryCategory,
+    sentences,
+    impliedRating,
+  };
 }
 
 /** Categorize all reviews and produce category summaries. */
@@ -231,25 +320,202 @@ export function categorizeAllReviews(reviews: ReviewData[]): {
   return { categorized, summaries };
 }
 
-/** Compute adjusted rating excluding reviews from specified categories. */
+// ── Adjusted Rating (sentence-level weighting) ──────────────────────
+
+/**
+ * Compute adjusted rating using sentence-level weighting.
+ *
+ * Instead of dropping entire reviews, we compute each review's contribution
+ * by excluding only the sentences about ignored topics. If a review has
+ * implied rating ("would have said X stars except for Y"), the non-excepted
+ * topics use the implied rating instead of the actual star rating.
+ */
 export function computeAdjustedRating(
   categorized: CategorizedReview[],
   ignoredCategories: string[],
 ): { adjustedRating: number; adjustedCount: number } {
-  const kept = categorized.filter(
-    (cr) =>
-      cr.primaryCategory === null ||
-      !ignoredCategories.includes(cr.primaryCategory),
-  );
+  if (ignoredCategories.length === 0) {
+    // No filtering — simple average
+    const count = categorized.length;
+    if (count === 0) return { adjustedRating: 0, adjustedCount: 0 };
+    const sum = categorized.reduce((s, cr) => s + cr.review.rating, 0);
+    return { adjustedRating: sum / count, adjustedCount: count };
+  }
 
-  const adjustedCount = kept.length;
-  const adjustedRating =
-    adjustedCount > 0
-      ? kept.reduce((sum, cr) => sum + cr.review.rating, 0) / adjustedCount
-      : 0;
+  let totalWeight = 0;
+  let weightedRatingSum = 0;
+  let contributingReviews = 0;
 
-  return { adjustedRating, adjustedCount };
+  for (const cr of categorized) {
+    const { sentences, review, impliedRating } = cr;
+
+    // Determine which sentences to keep (not in any ignored category)
+    const keptSentences = sentences.filter(
+      (s) => !s.categories.some((c) => ignoredCategories.includes(c)),
+    );
+
+    if (keptSentences.length === 0) continue; // entire review is about ignored topics
+
+    contributingReviews++;
+
+    // Sum the weight of kept sentences
+    const keptWeight = keptSentences.reduce((sum, s) => sum + s.weight, 0);
+
+    // If there's an implied rating and some ignored sentences exist,
+    // use the implied rating for the kept portion
+    const hasIgnoredSentences = keptSentences.length < sentences.length;
+    const effectiveRating = (impliedRating !== null && hasIgnoredSentences)
+      ? impliedRating
+      : review.rating;
+
+    totalWeight += keptWeight;
+    weightedRatingSum += keptWeight * effectiveRating;
+  }
+
+  if (totalWeight === 0) return { adjustedRating: 0, adjustedCount: 0 };
+
+  return {
+    adjustedRating: weightedRatingSum / totalWeight,
+    adjustedCount: contributingReviews,
+  };
 }
+
+// ── Per-Topic Scores ────────────────────────────────────────────────
+
+/**
+ * Compute per-topic average ratings from sentence-level data.
+ * Each sentence contributes its review's rating (or implied rating) to its topics.
+ */
+export function computeTopicScores(
+  categorized: CategorizedReview[],
+): TopicScore[] {
+  const topicData = new Map<string, { totalRating: number; totalWeight: number; reviews: Set<number> }>();
+
+  for (let i = 0; i < categorized.length; i++) {
+    const cr = categorized[i];
+    for (const sentence of cr.sentences) {
+      for (const catId of sentence.categories) {
+        if (!topicData.has(catId)) {
+          topicData.set(catId, { totalRating: 0, totalWeight: 0, reviews: new Set() });
+        }
+        const data = topicData.get(catId)!;
+        data.totalRating += sentence.weight * cr.review.rating;
+        data.totalWeight += sentence.weight;
+        data.reviews.add(i);
+      }
+    }
+  }
+
+  const scores: TopicScore[] = [];
+  for (const [categoryId, data] of topicData) {
+    if (data.totalWeight === 0) continue;
+    const avgRating = data.totalRating / data.totalWeight;
+    scores.push({
+      categoryId,
+      avgRating: Math.round(avgRating * 10) / 10,
+      sentenceMentions: Math.round(data.totalWeight * categorized.length), // approximate
+      reviewMentions: data.reviews.size,
+      sentiment: avgRating >= 4.0 ? "positive" : avgRating >= 3.0 ? "mixed" : "negative",
+    });
+  }
+
+  scores.sort((a, b) => b.reviewMentions - a.reviewMentions);
+  return scores;
+}
+
+// ── Temporal Trends ─────────────────────────────────────────────────
+
+/**
+ * Group reviews into quarterly windows and compute per-topic sentiment over time.
+ * Requires at least 2 reviews with valid dates.
+ */
+export function computeTopicTrends(
+  categorized: CategorizedReview[],
+): TopicTrendWindow[] {
+  // Filter to reviews with valid dates
+  const dated = categorized.filter(
+    (cr) => cr.review.date && !isNaN(cr.review.date.getTime()),
+  );
+  if (dated.length < 2) return [];
+
+  // Sort by date
+  dated.sort((a, b) => a.review.date.getTime() - b.review.date.getTime());
+
+  // Determine quarter boundaries
+  const earliest = dated[0].review.date;
+  const latest = dated[dated.length - 1].review.date;
+
+  const windows: TopicTrendWindow[] = [];
+  let windowStart = new Date(earliest.getFullYear(), Math.floor(earliest.getMonth() / 3) * 3, 1);
+
+  while (windowStart <= latest) {
+    const windowEnd = new Date(windowStart.getFullYear(), windowStart.getMonth() + 3, 1);
+
+    const inWindow = dated.filter((cr) => {
+      const t = cr.review.date.getTime();
+      return t >= windowStart.getTime() && t < windowEnd.getTime();
+    });
+
+    if (inWindow.length > 0) {
+      const scores = new Map<string, { total: number; weight: number }>();
+
+      for (const cr of inWindow) {
+        for (const sentence of cr.sentences) {
+          for (const catId of sentence.categories) {
+            if (!scores.has(catId)) scores.set(catId, { total: 0, weight: 0 });
+            const d = scores.get(catId)!;
+            d.total += sentence.weight * cr.review.rating;
+            d.weight += sentence.weight;
+          }
+        }
+      }
+
+      const scoreMap = new Map<string, number>();
+      for (const [catId, d] of scores) {
+        if (d.weight > 0) scoreMap.set(catId, d.total / d.weight);
+      }
+
+      windows.push({
+        windowStart: new Date(windowStart),
+        windowEnd: new Date(windowEnd),
+        scores: scoreMap,
+        reviewCount: inWindow.length,
+      });
+    }
+
+    windowStart = windowEnd;
+  }
+
+  return windows;
+}
+
+/**
+ * Annotate topic scores with trend direction based on temporal windows.
+ * Compares the latest window to the previous window(s).
+ */
+export function annotateTrends(
+  topicScores: TopicScore[],
+  windows: TopicTrendWindow[],
+): TopicScore[] {
+  if (windows.length < 2) return topicScores;
+
+  const latest = windows[windows.length - 1];
+  const previous = windows[windows.length - 2];
+
+  return topicScores.map((ts) => {
+    const latestScore = latest.scores.get(ts.categoryId);
+    const prevScore = previous.scores.get(ts.categoryId);
+    if (latestScore == null || prevScore == null) return ts;
+
+    const diff = latestScore - prevScore;
+    const trend: "rising" | "falling" | "stable" =
+      diff > 0.5 ? "rising" : diff < -0.5 ? "falling" : "stable";
+
+    return { ...ts, trend };
+  });
+}
+
+// ── Main Entry Point ────────────────────────────────────────────────
 
 /** Get the full ProductInsights for a set of reviews and ignored categories. */
 export function getProductInsights(
@@ -261,11 +527,16 @@ export function getProductInsights(
     categorized,
     ignoredCategories,
   );
+  const trendWindows = computeTopicTrends(categorized);
+  let topicScores = computeTopicScores(categorized);
+  topicScores = annotateTrends(topicScores, trendWindows);
 
   return {
     categorySummaries: summaries,
     categorizedReviews: categorized,
     adjustedRating,
     adjustedReviewCount: adjustedCount,
+    topicScores,
+    trendWindows,
   };
 }

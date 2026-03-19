@@ -53,10 +53,10 @@ describe("categorizeReview", () => {
     expect(result.categories).toContain("durability");
   });
 
-  it("returns empty categories and null primaryCategory for a generic review", () => {
+  it("defaults uncategorized sentences to product-quality", () => {
     const result = categorizeReview(review("Ok", 3));
-    expect(result.categories).toHaveLength(0);
-    expect(result.primaryCategory).toBeNull();
+    expect(result.categories).toContain("product-quality");
+    expect(result.primaryCategory).toBe("product-quality");
   });
 
   it("matches value for a price-focused review", () => {

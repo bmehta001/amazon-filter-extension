@@ -1,5 +1,6 @@
-import type { ProductInsights, CategorySummary } from "../../review/types";
+import type { ProductInsights, CategorySummary, TopicScore } from "../../review/types";
 import { REVIEW_CATEGORIES, type ReviewCategory } from "../../review/categories";
+import { buildRadarChart } from "./radarChart";
 
 const PANEL_CLASS = "bas-insights-panel";
 
@@ -131,6 +132,80 @@ export const REVIEW_INSIGHTS_STYLES = `
   font-size: 11px;
   color: #555;
 }
+
+.bas-topic-scores {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.bas-topic-scores-header {
+  font-size: 11px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.bas-topic-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.bas-topic-label {
+  width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+
+.bas-topic-bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 40px;
+  position: relative;
+}
+
+.bas-topic-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.bas-topic-rating {
+  width: 32px;
+  text-align: right;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.bas-topic-trend {
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.bas-topic-sentiment {
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.bas-topic-mentions {
+  width: 50px;
+  text-align: right;
+  font-size: 10px;
+  color: #888;
+  flex-shrink: 0;
+}
 `;
 
 function getBarColor(avgRating: number): string {
@@ -210,6 +285,97 @@ function getExcludedCategoryLabels(ignoredCategories: string[]): string[] {
     .filter((label): label is string => label != null);
 }
 
+function getTrendIcon(trend?: "rising" | "falling" | "stable"): string {
+  if (trend === "rising") return "↑";
+  if (trend === "falling") return "↓";
+  if (trend === "stable") return "→";
+  return "";
+}
+
+function getTrendColor(trend?: "rising" | "falling" | "stable"): string {
+  if (trend === "rising") return "#28a745";
+  if (trend === "falling") return "#dc3545";
+  return "#888";
+}
+
+function getSentimentIcon(sentiment: "positive" | "mixed" | "negative"): string {
+  if (sentiment === "positive") return "👍";
+  if (sentiment === "negative") return "👎";
+  return "➖";
+}
+
+function buildTopicRow(topic: TopicScore): HTMLElement {
+  const meta = getCategoryMeta(topic.categoryId);
+  const row = document.createElement("div");
+  row.className = "bas-topic-row";
+
+  // Sentiment icon
+  const sentimentEl = document.createElement("span");
+  sentimentEl.className = "bas-topic-sentiment";
+  sentimentEl.textContent = getSentimentIcon(topic.sentiment);
+  row.appendChild(sentimentEl);
+
+  // Label
+  const label = document.createElement("span");
+  label.className = "bas-topic-label";
+  label.textContent = meta?.label ?? topic.categoryId;
+  label.title = meta?.description ?? "";
+  row.appendChild(label);
+
+  // Bar
+  const barContainer = document.createElement("span");
+  barContainer.className = "bas-topic-bar-container";
+  const barFill = document.createElement("span");
+  barFill.className = "bas-topic-bar-fill";
+  barFill.style.width = `${(topic.avgRating / 5) * 100}%`;
+  barFill.style.backgroundColor = getBarColor(topic.avgRating);
+  barContainer.appendChild(barFill);
+  row.appendChild(barContainer);
+
+  // Rating
+  const rating = document.createElement("span");
+  rating.className = "bas-topic-rating";
+  rating.textContent = formatRating(topic.avgRating);
+  rating.style.color = getBarColor(topic.avgRating);
+  row.appendChild(rating);
+
+  // Trend
+  const trend = document.createElement("span");
+  trend.className = "bas-topic-trend";
+  trend.textContent = getTrendIcon(topic.trend);
+  trend.style.color = getTrendColor(topic.trend);
+  if (topic.trend) {
+    trend.title = `Trend: ${topic.trend} (compared to previous quarter)`;
+  }
+  row.appendChild(trend);
+
+  // Mentions
+  const mentions = document.createElement("span");
+  mentions.className = "bas-topic-mentions";
+  mentions.textContent = `${topic.reviewMentions} review${topic.reviewMentions !== 1 ? "s" : ""}`;
+  row.appendChild(mentions);
+
+  return row;
+}
+
+function buildTopicScoresSection(topicScores: TopicScore[]): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "bas-topic-scores";
+
+  const header = document.createElement("div");
+  header.className = "bas-topic-scores-header";
+  header.textContent = "📈 Topic Breakdown";
+  section.appendChild(header);
+
+  // Show top 6 topics by review mentions
+  const displayed = topicScores.slice(0, 6);
+  for (const topic of displayed) {
+    section.appendChild(buildTopicRow(topic));
+  }
+
+  return section;
+}
+
 /** Inject or update the review insights panel on a product card. */
 export function injectReviewInsights(
   card: HTMLElement,
@@ -270,6 +436,16 @@ export function injectReviewInsights(
       `${insights.adjustedReviewCount} reviews`;
   }
   body.appendChild(summaryLine);
+
+  // Radar chart visualization (when ≥3 topics exist)
+  if (insights.topicScores && insights.topicScores.length >= 3) {
+    body.appendChild(buildRadarChart(insights.topicScores));
+  }
+
+  // Per-topic breakdown section (sentence-level analysis)
+  if (insights.topicScores && insights.topicScores.length > 0) {
+    body.appendChild(buildTopicScoresSection(insights.topicScores));
+  }
 
   panel.appendChild(body);
 
