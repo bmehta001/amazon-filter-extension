@@ -10,7 +10,7 @@ import type { CpscRecall, RecallMatch, RecallCacheEntry } from "./types";
 
 const CPSC_BASE = "https://www.saferproducts.gov/RestWebServices/Recall";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const MIN_CONFIDENCE = 0.3;
+const MIN_CONFIDENCE = 0.45;
 
 // In-memory cache (per page session — cleared on navigation)
 const queryCache = new Map<string, RecallCacheEntry>();
@@ -87,6 +87,16 @@ const STOP_WORDS = new Set([
 ]);
 
 /**
+ * Generic product type words that should have reduced matching weight.
+ * These cause false positives when they're the only overlapping tokens.
+ */
+const GENERIC_PRODUCT_WORDS = new Set([
+  "baby", "children", "kids", "adult", "portable", "electric", "wireless",
+  "mini", "small", "large", "big", "inch", "pack", "black", "white", "blue",
+  "red", "pink", "green", "gray", "grey",
+]);
+
+/**
  * Extract meaningful tokens from a product title for matching.
  * Returns lowercased tokens with stop words removed.
  */
@@ -101,6 +111,12 @@ export function extractMatchTokens(title: string): string[] {
 /**
  * Compute a match confidence between an Amazon product and a CPSC recall.
  * Uses token overlap between product title and recall title/description/products.
+ *
+ * Key anti-false-positive measures:
+ * - Generic product words get 0.5x weight
+ * - Brand mismatch (recall names brand X, product is brand Y) applies a penalty
+ * - "Sold on Amazon" boost only kicks in at ≥0.3 base confidence
+ * - Minimum 2 non-generic token matches required for title/product-name
  */
 export function computeMatchConfidence(
   productTitle: string,
@@ -114,49 +130,94 @@ export function computeMatchConfidence(
 
   let maxScore = 0;
   const matchedOn: string[] = [];
+  let hasBrandMatch = false;
 
-  // Match against recall title
-  const titleTokens = extractMatchTokens(recall.Title);
-  const titleOverlap = countOverlap(productTokens, titleTokens);
-  const titleScore = titleTokens.length > 0 ? titleOverlap / titleTokens.length : 0;
-  if (titleScore > maxScore) maxScore = titleScore;
-  if (titleOverlap >= 2) matchedOn.push("title");
+  // Extract the recall's brand from product names
+  const recallBrandTokens = new Set<string>();
+  for (const product of recall.Products) {
+    const nameTokens = extractMatchTokens(product.Name);
+    // First 1-2 tokens of recall product name are typically the brand
+    for (const t of nameTokens.slice(0, 2)) {
+      if (!GENERIC_PRODUCT_WORDS.has(t)) recallBrandTokens.add(t);
+    }
+  }
 
-  // Match against recall product names
+  // Match against recall product names (highest priority)
   for (const product of recall.Products) {
     const recallProductTokens = extractMatchTokens(product.Name);
-    const overlap = countOverlap(productTokens, recallProductTokens);
-    const score = recallProductTokens.length > 0 ? overlap / recallProductTokens.length : 0;
+    const { score, nonGenericMatches } = computeWeightedOverlap(productTokens, recallProductTokens);
     if (score > maxScore) maxScore = score;
-    if (overlap >= 2) matchedOn.push("product-name");
+    if (nonGenericMatches >= 2) matchedOn.push("product-name");
 
-    // Brand match boost: if product brand matches recall product name
+    // Brand match boost
     if (brandTokens.size > 0) {
       const brandOverlap = countOverlap(brandTokens, recallProductTokens);
       if (brandOverlap > 0) {
-        maxScore = Math.min(1, maxScore + 0.2);
+        maxScore = Math.min(1, maxScore + 0.25);
         matchedOn.push("brand");
+        hasBrandMatch = true;
       }
     }
   }
 
+  // Match against recall title
+  const titleTokens = extractMatchTokens(recall.Title);
+  const { score: titleScore, nonGenericMatches: titleNonGeneric } = computeWeightedOverlap(productTokens, titleTokens);
+  if (titleScore > maxScore) maxScore = titleScore;
+  if (titleNonGeneric >= 2) matchedOn.push("title");
+
   // Match against recall description (lower weight)
   const descTokens = extractMatchTokens(recall.Description);
-  const descOverlap = countOverlap(productTokens, descTokens);
-  const descScore = descTokens.length > 0 ? (descOverlap / descTokens.length) * 0.6 : 0;
+  const { score: rawDescScore } = computeWeightedOverlap(productTokens, descTokens);
+  const descScore = rawDescScore * 0.5; // descriptions are long, overlap is inflated
   if (descScore > maxScore) maxScore = descScore;
-  if (descOverlap >= 3) matchedOn.push("description");
+  if (rawDescScore > 0.2) matchedOn.push("description");
 
-  // Check if recall was sold on Amazon (strong relevance signal)
+  // Brand mismatch penalty: if the recall names a specific brand and
+  // the product has a DIFFERENT brand, reduce confidence significantly
+  if (brandTokens.size > 0 && recallBrandTokens.size > 0 && !hasBrandMatch) {
+    const brandMatchesRecall = [...brandTokens].some((t) => recallBrandTokens.has(t));
+    if (!brandMatchesRecall) {
+      maxScore *= 0.4; // 60% penalty for brand mismatch
+    }
+  }
+
+  // "Sold on Amazon" boost — only meaningful when base match is already decent
   const soldOnAmazon = recall.Retailers.some(
     (r) => r.Name.toLowerCase().includes("amazon"),
   );
-  if (soldOnAmazon && maxScore > 0.1) {
-    maxScore = Math.min(1, maxScore + 0.15);
+  if (soldOnAmazon && maxScore >= 0.3) {
+    maxScore = Math.min(1, maxScore + 0.1);
     matchedOn.push("sold-on-amazon");
   }
 
   return { confidence: Math.round(maxScore * 100) / 100, matchedOn: [...new Set(matchedOn)] };
+}
+
+/**
+ * Compute weighted token overlap, giving generic product words half weight.
+ * Returns both the overall score and count of non-generic matches.
+ */
+function computeWeightedOverlap(
+  productTokens: Set<string>,
+  targetTokens: string[],
+): { score: number; nonGenericMatches: number } {
+  let weightedMatches = 0;
+  let totalWeight = 0;
+  let nonGenericMatches = 0;
+
+  for (const token of targetTokens) {
+    const isGeneric = GENERIC_PRODUCT_WORDS.has(token);
+    const weight = isGeneric ? 0.5 : 1;
+    totalWeight += weight;
+    if (productTokens.has(token)) {
+      weightedMatches += weight;
+      if (!isGeneric) nonGenericMatches++;
+    }
+  }
+
+  const score = totalWeight > 0 ? weightedMatches / totalWeight : 0;
+  return { score, nonGenericMatches };
 }
 
 function countOverlap(setA: Set<string>, tokensB: string[]): number {
