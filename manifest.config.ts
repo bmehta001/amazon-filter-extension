@@ -19,6 +19,7 @@ export default defineManifest({
     "https://www.amazon.in/*",
     "https://www.amazon.co.jp/*",
     "https://www.amazon.com.au/*",
+    "https://www.saferproducts.gov/*",
   ],
   background: {
     service_worker: "src/background/service_worker.ts",

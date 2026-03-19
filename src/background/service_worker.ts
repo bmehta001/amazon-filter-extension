@@ -84,4 +84,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
     return true; // Keep message channel open for async response
   }
+
+  if (message.type === "fetchRecalls") {
+    const query = message.query as string;
+    const url = `https://www.saferproducts.gov/RestWebServices/Recall?ProductName=${encodeURIComponent(query)}&format=json`;
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`CPSC API ${res.status}`);
+        return res.json();
+      })
+      .then((recalls) => sendResponse({ recalls }))
+      .catch((err) => sendResponse({ error: err.message, recalls: [] }));
+    return true;
+  }
 });

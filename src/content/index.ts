@@ -17,6 +17,7 @@ import { injectReviewInsights, REVIEW_INSIGHTS_STYLES } from "./ui/reviewInsight
 import { RADAR_CHART_STYLES } from "./ui/radarChart";
 import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
 import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
+import { injectRecallBadge, RECALL_BADGE_STYLES } from "./ui/recallBadge";
 import { computeDealScore } from "./dealScoring";
 import { sortProducts, resetOriginalOrder } from "./sorting";
 import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } from "./ui/transparencyTooltip";
@@ -30,6 +31,8 @@ import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
 import { generateReviewSummary, generateSummaryFromTopicScores } from "../review/summary";
+import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
+import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
@@ -63,6 +66,7 @@ ${DEAL_BADGE_STYLES}
 ${TRANSPARENCY_STYLES}
 ${REVIEW_SUMMARY_STYLES}
 ${RADAR_CHART_STYLES}
+${RECALL_BADGE_STYLES}
 ${TOUR_STYLES}
 `;
 
@@ -176,6 +180,9 @@ async function main(): Promise<void> {
 
   // Show onboarding feature tour on first visit (non-blocking)
   void tryShowFeatureTour();
+
+  // Check for product recalls (non-blocking background task)
+  void queueRecallCheck();
 
   // Start background pagination if viewing multiple pages (not on Haul — Haul uses infinite scroll)
   if (!isHaulMode && currentFilters.totalPages > 1) {
@@ -306,6 +313,7 @@ function watchForSoftNavigation(): void {
       brandMap.clear();
       sellerMap.clear();
       originMap.clear();
+      clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }
   }, CHECK_INTERVAL_MS);
@@ -963,6 +971,40 @@ function injectReviewSummary(card: HTMLElement, oneLiner: string): void {
     anchor.parentElement?.insertBefore(el, anchor.nextSibling);
   } else {
     card.appendChild(el);
+  }
+}
+
+// ── Recall Check ─────────────────────────────────────────────────────
+
+/**
+ * Fetch CPSC recalls for the current search query and match against products.
+ * Runs once per page load as a non-blocking background task.
+ */
+async function queueRecallCheck(): Promise<void> {
+  try {
+    const searchQuery = extractSearchQuery();
+    if (!searchQuery) return;
+
+    const recalls = await fetchRecallsViaServiceWorker(searchQuery);
+    if (recalls.length === 0) return;
+
+    console.log(`[BAS] Found ${recalls.length} CPSC recalls for "${searchQuery}"`);
+
+    // Re-extract products from DOM to get current titles
+    const products = isHaulMode ? extractAllHaulProducts() : extractAllProducts();
+
+    for (const product of products) {
+      const matches = matchProductToRecalls(
+        product.title,
+        product.brand !== "Unknown" ? product.brand : undefined,
+        recalls,
+      );
+      if (matches.length > 0) {
+        injectRecallBadge(product.element, matches);
+      }
+    }
+  } catch (err) {
+    console.warn("[BAS] Recall check error:", err);
   }
 }
 
