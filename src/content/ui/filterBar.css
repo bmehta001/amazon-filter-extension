@@ -164,3 +164,32 @@
     text-align: right;
   }
 }
+
+/* ── Export menu ──────────────────────────────────────────────────── */
+.bas-export-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #d5d9d9;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  min-width: 150px;
+  padding: 4px 0;
+}
+.bas-export-option {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  color: #0f1111;
+  cursor: pointer;
+}
+.bas-export-option:hover {
+  background: #f0f2f2;
+  color: #c45500;
+}

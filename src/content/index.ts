@@ -41,6 +41,9 @@ import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer
 import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
 import { generateReviewSummary, generateSummaryFromTopicScores } from "../review/summary";
+import type { ReviewSummary } from "../review/summary";
+import { buildExportRows, exportToCsv, exportToJson, exportToClipboard, downloadFile, getExportFilename } from "./export";
+import type { EnrichmentMaps } from "./export";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
@@ -147,6 +150,12 @@ const trustScoreMap = new Map<string, TrustScoreResult>();
 const sellerTrustMap = new Map<string, SellerTrustResult>();
 /** Map ASIN → ListingIntegrityResult for listing hijack detection. */
 const listingIntegrityMap = new Map<string, ListingIntegrityResult>();
+/** Map ASIN → deal score (numeric) for export. */
+const dealScoreExportMap = new Map<string, number>();
+/** Map ASIN → ReviewSummary for export. */
+const reviewSummaryMap = new Map<string, ReviewSummary>();
+/** Last set of visible products (for export). */
+let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 
@@ -251,6 +260,7 @@ async function injectFilterBar(): Promise<void> {
     onFilterChange: handleFilterChange,
     onQueryBuilderApply: handleQueryBuilderApply,
     onAmazonOnly: handleAmazonOnly,
+    onExport: handleExport,
   };
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -335,6 +345,9 @@ function watchForSoftNavigation(): void {
       trustScoreMap.clear();
       sellerTrustMap.clear();
       listingIntegrityMap.clear();
+      dealScoreExportMap.clear();
+      reviewSummaryMap.clear();
+      lastVisibleProducts = [];
       clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }
@@ -545,6 +558,10 @@ async function filterAllProducts(): Promise<void> {
     sortProducts(visibleProducts, "default");
   }
 
+  // Sync export data
+  lastVisibleProducts = visibleProducts;
+  for (const [k, v] of dealScoreMap) dealScoreExportMap.set(k, v);
+
   // Update stats
   if (filterBarHost) {
     if (isDistributedMode) {
@@ -678,6 +695,45 @@ function handleQueryBuilderApply(excludeTokens: string[]): void {
  */
 function handleAmazonOnly(): void {
   window.location.href = buildAmazonOnlyUrl();
+}
+
+/** Export visible search results in the requested format. */
+function handleExport(format: "csv" | "json" | "clipboard"): void {
+  const maps: EnrichmentMaps = {
+    reviewScoreMap,
+    trustScoreMap,
+    sellerTrustMap,
+    listingIntegrityMap,
+    originMap,
+    dealScoreMap: dealScoreExportMap,
+    summaryMap: reviewSummaryMap,
+  };
+  const rows = buildExportRows(lastVisibleProducts, maps);
+  if (rows.length === 0) {
+    console.warn("[BAS] No products to export");
+    return;
+  }
+
+  switch (format) {
+    case "csv": {
+      const csv = exportToCsv(rows);
+      downloadFile(csv, getExportFilename("csv"), "text/csv;charset=utf-8");
+      break;
+    }
+    case "json": {
+      const json = exportToJson(rows);
+      downloadFile(json, getExportFilename("json"), "application/json;charset=utf-8");
+      break;
+    }
+    case "clipboard": {
+      const tsv = exportToClipboard(rows);
+      navigator.clipboard.writeText(tsv).then(
+        () => console.log("[BAS] Exported to clipboard"),
+        (err) => console.warn("[BAS] Clipboard write failed:", err),
+      );
+      break;
+    }
+  }
 }
 
 /**
@@ -873,8 +929,9 @@ function queueReviewAnalysis(products: Product[]): void {
           const summary = (insights.topicScores.length > 0)
             ? generateSummaryFromTopicScores(insights.topicScores)
             : generateReviewSummary(reviewData.reviews);
-          if (summary?.oneLiner) {
-            injectReviewSummary(product.element, summary.oneLiner);
+          if (summary) {
+            if (summary.oneLiner) injectReviewSummary(product.element, summary.oneLiner);
+            reviewSummaryMap.set(asin, summary);
           }
         }
       } catch (err) {

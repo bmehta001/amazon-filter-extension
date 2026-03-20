@@ -8,6 +8,7 @@ export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
   onAmazonOnly: () => void;
+  onExport?: (format: "csv" | "json" | "clipboard") => void;
 }
 
 /**
@@ -413,6 +414,38 @@ export function createFilterBar(
   sellerBtn.title = "Show only products sold and shipped by Amazon";
   sellerBtn.addEventListener("click", () => callbacks.onAmazonOnly());
   helpersGroup.appendChild(sellerBtn);
+
+  // Export dropdown
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "bas-btn";
+  exportBtn.textContent = "📥 Export";
+  exportBtn.title = "Export visible search results";
+  const exportMenu = document.createElement("div");
+  exportMenu.className = "bas-export-menu";
+  exportMenu.style.display = "none";
+  for (const [fmt, label] of [["csv", "Download CSV"], ["json", "Download JSON"], ["clipboard", "Copy to Clipboard"]] as const) {
+    const opt = document.createElement("button");
+    opt.className = "bas-export-option";
+    opt.textContent = label;
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportMenu.style.display = "none";
+      callbacks.onExport?.(fmt);
+    });
+    exportMenu.appendChild(opt);
+  }
+  exportBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    exportMenu.style.display = exportMenu.style.display === "none" ? "block" : "none";
+  });
+  // Close menu when clicking outside
+  shadow.addEventListener("click", () => { exportMenu.style.display = "none"; });
+  const exportWrapper = document.createElement("span");
+  exportWrapper.style.position = "relative";
+  exportWrapper.appendChild(exportBtn);
+  exportWrapper.appendChild(exportMenu);
+  helpersGroup.appendChild(exportWrapper);
+
   bar.appendChild(helpersGroup);
 
   // Stats display

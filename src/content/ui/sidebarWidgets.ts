@@ -23,6 +23,7 @@ export interface DistributedCallbacks {
   onFilterChange: (state: FilterState) => void;
   onQueryBuilderApply: (excludeTokens: string[]) => void;
   onAmazonOnly: () => void;
+  onExport?: (format: "csv" | "json" | "clipboard") => void;
 }
 
 /** All widgets injected into the sidebar, for cleanup. */
@@ -149,6 +150,30 @@ export function createDistributedFilters(
     const actionsGroup = wGroup("", "");
     const sellerBtn = wButton("Amazon Only", "Show only products sold by Amazon", () => callbacks.onAmazonOnly());
     actionsGroup.append(sellerBtn);
+    const exportBtn = wButton("📥 Export", "Export visible search results", () => {});
+    const exportMenu = document.createElement("div");
+    exportMenu.className = "bas-export-menu";
+    exportMenu.style.display = "none";
+    for (const [fmt, label] of [["csv", "Download CSV"], ["json", "Download JSON"], ["clipboard", "Copy to Clipboard"]] as const) {
+      const opt = document.createElement("button");
+      opt.className = "bas-export-option";
+      opt.textContent = label;
+      opt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        exportMenu.style.display = "none";
+        callbacks.onExport?.(fmt);
+      });
+      exportMenu.appendChild(opt);
+    }
+    exportBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportMenu.style.display = exportMenu.style.display === "none" ? "block" : "none";
+    });
+    const exportWrapper = document.createElement("span");
+    exportWrapper.style.position = "relative";
+    exportWrapper.appendChild(exportBtn);
+    exportWrapper.appendChild(exportMenu);
+    actionsGroup.append(exportWrapper);
     container.appendChild(actionsGroup);
 
     // Sort
