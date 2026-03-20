@@ -18,6 +18,11 @@ import { RADAR_CHART_STYLES } from "./ui/radarChart";
 import { injectPriceSparkline, PRICE_SPARKLINE_STYLES } from "./ui/priceSparkline";
 import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
 import { injectRecallBadge, RECALL_BADGE_STYLES } from "./ui/recallBadge";
+import { injectTrustBadge, TRUST_BADGE_STYLES } from "./ui/trustBadge";
+import { injectSellerBadge, SELLER_BADGE_STYLES } from "./ui/sellerBadge";
+import { computeTrustScore } from "../review/trustScore";
+import type { TrustScoreResult } from "../review/trustScore";
+import { computeSellerTrust } from "../seller/trust";
 import { computeDealScore } from "./dealScoring";
 import { sortProducts, resetOriginalOrder } from "./sorting";
 import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } from "./ui/transparencyTooltip";
@@ -67,6 +72,8 @@ ${TRANSPARENCY_STYLES}
 ${REVIEW_SUMMARY_STYLES}
 ${RADAR_CHART_STYLES}
 ${RECALL_BADGE_STYLES}
+${TRUST_BADGE_STYLES}
+${SELLER_BADGE_STYLES}
 ${TOUR_STYLES}
 `;
 
@@ -128,6 +135,8 @@ const brandMap = new Map<string, string>();
 const sellerMap = new Map<string, SellerInfo>();
 /** Map ASIN → country of origin for products enriched via background fetch. */
 const originMap = new Map<string, string>();
+/** Map ASIN → TrustScoreResult for review authenticity analysis. */
+const trustScoreMap = new Map<string, TrustScoreResult>();
 /** Global preferences loaded from popup settings. */
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 
@@ -313,6 +322,7 @@ function watchForSoftNavigation(): void {
       brandMap.clear();
       sellerMap.clear();
       originMap.clear();
+      trustScoreMap.clear();
       clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }
@@ -764,15 +774,18 @@ function queueReviewAnalysis(products: Product[]): void {
     if (reviewScoreMap.has(asin)) {
       const score = reviewScoreMap.get(asin)!;
       injectReviewBadge(product.element, score);
-      // Also inject insights if available
+      if (trustScoreMap.has(asin)) {
+        injectTrustBadge(product.element, trustScoreMap.get(asin)!);
+      }
       if (productInsightsMap.has(asin)) {
         injectReviewInsights(product.element, productInsightsMap.get(asin)!, currentFilters.ignoredCategories);
       }
       continue;
     }
 
-    // Show loading badge
+    // Show loading badges
     injectReviewBadge(product.element, null);
+    injectTrustBadge(product.element, null);
 
     // Check cache, then fetch if needed
     void (async () => {
@@ -804,7 +817,7 @@ function queueReviewAnalysis(products: Product[]): void {
           }
         }
 
-        // Compute and inject category insights
+        // Compute and inject category insights + trust score
         if (reviewData && reviewData.reviews.length > 0) {
           reviewDataMap.set(asin, reviewData);
           const insights = getProductInsights(reviewData.reviews, currentFilters.ignoredCategories);
@@ -815,6 +828,11 @@ function queueReviewAnalysis(products: Product[]): void {
             const result = await applyFilters(product, currentFilters);
             applyFilterResult(product.element, result);
           }
+
+          // Compute and inject trust score
+          const trustResult = computeTrustScore(reviewData, insights.categorizedReviews);
+          trustScoreMap.set(asin, trustResult);
+          injectTrustBadge(product.element, trustResult);
 
           // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
           const summary = (insights.topicScores.length > 0)
@@ -856,6 +874,10 @@ function queueDetailEnrichment(products: Product[]): void {
     }
     if (needsSeller && sellerMap.has(asin)) {
       product.seller = sellerMap.get(asin)!;
+      const sellerTrust = computeSellerTrust(product);
+      if (sellerTrust) {
+        injectSellerBadge(product.element, sellerTrust);
+      }
     }
     if (product.brandCertain && product.seller) continue;
 
@@ -906,6 +928,12 @@ function queueDetailEnrichment(products: Product[]): void {
           sellerMap.set(asin, seller);
           product.seller = seller;
           needsRefilter = true;
+
+          // Inject seller trust badge
+          const sellerTrust = computeSellerTrust(product);
+          if (sellerTrust) {
+            injectSellerBadge(product.element, sellerTrust);
+          }
         }
 
         if (product.countryOfOrigin) {
