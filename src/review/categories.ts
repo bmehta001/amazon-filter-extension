@@ -167,6 +167,13 @@ export const REVIEW_CATEGORIES: ReviewCategory[] = [
   },
 ];
 
+// Pre-compiled keyword regex per category (built once at module load).
+// Each entry maps category id → a single regex that matches any keyword.
+const CATEGORY_MATCHERS: { id: string; regex: RegExp }[] = REVIEW_CATEGORIES.map((cat) => {
+  const escaped = cat.keywords.map((kw) => kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return { id: cat.id, regex: new RegExp(`(?:${escaped.join("|")})`, "i") };
+});
+
 // ── Sentence Splitting ──────────────────────────────────────────────
 
 /**
@@ -227,14 +234,10 @@ export function detectImpliedRating(text: string): number | null {
 
 /** Tag a single sentence with matching category IDs. */
 export function categorizeSentence(sentence: string): string[] {
-  const lower = sentence.toLowerCase();
   const matched: string[] = [];
-  for (const cat of REVIEW_CATEGORIES) {
-    for (const kw of cat.keywords) {
-      if (lower.includes(kw)) {
-        matched.push(cat.id);
-        break;
-      }
+  for (const { id, regex } of CATEGORY_MATCHERS) {
+    if (regex.test(sentence)) {
+      matched.push(id);
     }
   }
   return matched;
@@ -294,13 +297,23 @@ export function categorizeAllReviews(reviews: ReviewData[]): {
   const categorized = reviews.map(categorizeReview);
   const totalReviews = reviews.length;
 
-  const summaries: CategorySummary[] = [];
+  // Single-pass: group reviews by category
+  const categoryMap = new Map<string, CategorizedReview[]>();
+  for (const cr of categorized) {
+    for (const catId of cr.categories) {
+      let list = categoryMap.get(catId);
+      if (!list) {
+        list = [];
+        categoryMap.set(catId, list);
+      }
+      list.push(cr);
+    }
+  }
 
+  const summaries: CategorySummary[] = [];
   for (const category of REVIEW_CATEGORIES) {
-    const matching = categorized.filter((cr) =>
-      cr.categories.includes(category.id),
-    );
-    if (matching.length === 0) continue;
+    const matching = categoryMap.get(category.id);
+    if (!matching || matching.length === 0) continue;
 
     const avgRating =
       matching.reduce((sum, cr) => sum + cr.review.rating, 0) / matching.length;

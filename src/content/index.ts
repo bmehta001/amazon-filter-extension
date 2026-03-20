@@ -529,6 +529,7 @@ async function filterAllProducts(): Promise<void> {
     // Remove old tooltip if present
     product.element.querySelector(".bas-transparency-wrapper")?.remove();
     const tooltipEl = createTransparencyTooltip(product, filterResultObj, pageStats);
+    // Reuse cached h2 element for tooltip insertion (avoids redundant DOM query)
     const titleArea = product.element.querySelector("h2");
     if (titleArea) {
       titleArea.parentElement?.appendChild(tooltipEl);
