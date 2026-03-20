@@ -13,6 +13,10 @@ export interface ProductDetailResult {
   brand: string | null;
   seller: SellerInfo | null;
   countryOfOrigin: string | null;
+  /** Number of other sellers offering this product. */
+  otherSellersCount: number;
+  /** Lowest "new" price from other sellers. */
+  otherSellersMinPrice: number | null;
 }
 
 /**
@@ -32,20 +36,29 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
 
     if (!response.ok) {
       console.warn(TAG, `Detail fetch failed for ${asin}: HTTP ${response.status}`);
-      return { brand: null, seller: null, countryOfOrigin: null };
+      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null };
     }
 
     const html = await response.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
 
+    const otherSellers = extractOtherSellersInfo(doc);
+    const seller = extractSellerFromDocument(doc);
+    if (seller) {
+      seller.otherSellersCount = otherSellers.count;
+      seller.otherSellersMinPrice = otherSellers.minPrice ?? undefined;
+    }
+
     return {
       brand: extractBrandFromDocument(doc),
-      seller: extractSellerFromDocument(doc),
+      seller,
       countryOfOrigin: extractCountryOfOrigin(doc),
+      otherSellersCount: otherSellers.count,
+      otherSellersMinPrice: otherSellers.minPrice,
     };
   } catch (err) {
     console.warn(TAG, `Error fetching details for ${asin}:`, err);
-    return { brand: null, seller: null, countryOfOrigin: null };
+    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null };
   }
 }
 
@@ -256,6 +269,72 @@ function normalizeCountry(raw: string): string {
   return name;
 }
 
+/**
+ * Extract "Other sellers" count and min price from a product detail page.
+ * Amazon shows this as "New (X) from $Y.YY" or "X new from $Y.YY" etc.
+ */
+export function extractOtherSellersInfo(doc: Document): { count: number; minPrice: number | null } {
+  // Strategy 1: "#olp-upd-new" — "New (5) from $12.99"
+  const olpNew = doc.querySelector("#olp-upd-new, #olp-upd-new-used, .olp-text-box");
+  if (olpNew?.textContent) {
+    const parsed = parseOtherSellersText(olpNew.textContent);
+    if (parsed.count > 0) return parsed;
+  }
+
+  // Strategy 2: "See All Buying Options" area
+  const buyingChoices = doc.querySelector(
+    "#buybox-see-all-buying-choices, " +
+    "#aod-ingress-bouncer, " +
+    "#all-offers-display-scroller"
+  );
+  if (buyingChoices?.textContent) {
+    const parsed = parseOtherSellersText(buyingChoices.textContent);
+    if (parsed.count > 0) return parsed;
+  }
+
+  // Strategy 3: "#olp_feature_div" — older layout
+  const olpFeature = doc.querySelector("#olp_feature_div");
+  if (olpFeature?.textContent) {
+    const parsed = parseOtherSellersText(olpFeature.textContent);
+    if (parsed.count > 0) return parsed;
+  }
+
+  // Strategy 4: Any text containing "X new from" pattern on the page
+  const allText = doc.querySelector("#ppd, #buyBoxAccordion, #desktop_buybox")?.textContent ?? "";
+  if (allText) {
+    const parsed = parseOtherSellersText(allText);
+    if (parsed.count > 0) return parsed;
+  }
+
+  return { count: 0, minPrice: null };
+}
+
+function parseOtherSellersText(text: string): { count: number; minPrice: number | null } {
+  const normalized = text.replace(/\s+/g, " ").trim();
+
+  // Pattern: "New (5) from $12.99" or "(5) New from $12.99"
+  const pattern1 = /(?:new|used)?\s*\((\d+)\)\s*(?:new|used)?\s*from\s*\$([0-9,.]+)/i;
+  const match1 = normalized.match(pattern1);
+  if (match1) {
+    return {
+      count: parseInt(match1[1], 10),
+      minPrice: parseFloat(match1[2].replace(",", "")),
+    };
+  }
+
+  // Pattern: "5 new from $12.99" or "12 offers from $9.99"
+  const pattern2 = /(\d+)\s+(?:new|used|offers?)\s+from\s+\$([0-9,.]+)/i;
+  const match2 = normalized.match(pattern2);
+  if (match2) {
+    return {
+      count: parseInt(match2[1], 10),
+      minPrice: parseFloat(match2[2].replace(",", "")),
+    };
+  }
+
+  return { count: 0, minPrice: null };
+}
+
 function parseSellerText(text: string): SellerInfo | null {
   const normalized = text.replace(/\s+/g, " ").trim();
 
@@ -339,7 +418,7 @@ export function createRateLimitedDetailFetcher(
       const result = await fetchProductDetails(item.asin);
       item.resolve(result);
     } catch {
-      item.resolve({ brand: null, seller: null, countryOfOrigin: null });
+      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null });
     } finally {
       active--;
       if (queue.length > 0) {

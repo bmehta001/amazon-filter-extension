@@ -20,9 +20,14 @@ import { injectDealBadge, DEAL_BADGE_STYLES } from "./ui/dealBadge";
 import { injectRecallBadge, RECALL_BADGE_STYLES } from "./ui/recallBadge";
 import { injectTrustBadge, TRUST_BADGE_STYLES } from "./ui/trustBadge";
 import { injectSellerBadge, SELLER_BADGE_STYLES } from "./ui/sellerBadge";
+import { injectConfidenceBadge, CONFIDENCE_BADGE_STYLES } from "./ui/confidenceBadge";
+import type { ConfidenceInput } from "./ui/confidenceBadge";
 import { computeTrustScore } from "../review/trustScore";
 import type { TrustScoreResult } from "../review/trustScore";
 import { computeSellerTrust } from "../seller/trust";
+import type { SellerTrustResult } from "../seller/trust";
+import { computeListingIntegrity } from "../seller/listingSignals";
+import type { ListingIntegrityResult } from "../seller/listingSignals";
 import { computeDealScore } from "./dealScoring";
 import { sortProducts, resetOriginalOrder } from "./sorting";
 import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } from "./ui/transparencyTooltip";
@@ -74,6 +79,7 @@ ${RADAR_CHART_STYLES}
 ${RECALL_BADGE_STYLES}
 ${TRUST_BADGE_STYLES}
 ${SELLER_BADGE_STYLES}
+${CONFIDENCE_BADGE_STYLES}
 ${TOUR_STYLES}
 `;
 
@@ -137,6 +143,10 @@ const sellerMap = new Map<string, SellerInfo>();
 const originMap = new Map<string, string>();
 /** Map ASIN → TrustScoreResult for review authenticity analysis. */
 const trustScoreMap = new Map<string, TrustScoreResult>();
+/** Map ASIN → SellerTrustResult for seller trust analysis. */
+const sellerTrustMap = new Map<string, SellerTrustResult>();
+/** Map ASIN → ListingIntegrityResult for listing hijack detection. */
+const listingIntegrityMap = new Map<string, ListingIntegrityResult>();
 /** Global preferences loaded from popup settings. */
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 
@@ -323,6 +333,8 @@ function watchForSoftNavigation(): void {
       sellerMap.clear();
       originMap.clear();
       trustScoreMap.clear();
+      sellerTrustMap.clear();
+      listingIntegrityMap.clear();
       clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }
@@ -762,6 +774,25 @@ function updateSponsoredVisibility(hide: boolean): void {
 }
 
 /**
+ * Inject the composite confidence badge for a product, aggregating all
+ * available trust dimensions. Called after any trust data becomes available.
+ */
+function injectConfidenceBadgeForProduct(asin: string, card: HTMLElement): void {
+  const input: ConfidenceInput = {};
+  if (trustScoreMap.has(asin)) input.reviewTrust = trustScoreMap.get(asin);
+  if (sellerTrustMap.has(asin)) input.sellerTrust = sellerTrustMap.get(asin);
+  if (listingIntegrityMap.has(asin)) input.listingIntegrity = listingIntegrityMap.get(asin);
+  // Deal score is computed synchronously during filtering, check the map
+  // (dealScoreMap only stores the numeric score, not the full object, so skip for now)
+
+  // Only inject if we have at least 2 dimensions to show
+  const dimensions = [input.reviewTrust, input.sellerTrust, input.listingIntegrity].filter(Boolean).length;
+  if (dimensions >= 2) {
+    injectConfidenceBadge(card, input);
+  }
+}
+
+/**
  * Queue background review analysis for products that haven't been scored yet.
  * Non-blocking — badges update asynchronously as results arrive.
  */
@@ -834,6 +865,9 @@ function queueReviewAnalysis(products: Product[]): void {
           trustScoreMap.set(asin, trustResult);
           injectTrustBadge(product.element, trustResult);
 
+          // Update confidence badge with new review trust data
+          injectConfidenceBadgeForProduct(asin, product.element);
+
           // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
           const summary = (insights.topicScores.length > 0)
             ? generateSummaryFromTopicScores(insights.topicScores)
@@ -876,8 +910,14 @@ function queueDetailEnrichment(products: Product[]): void {
       product.seller = sellerMap.get(asin)!;
       const sellerTrust = computeSellerTrust(product);
       if (sellerTrust) {
+        sellerTrustMap.set(asin, sellerTrust);
         injectSellerBadge(product.element, sellerTrust);
       }
+      const listing = computeListingIntegrity(product);
+      if (listing) {
+        listingIntegrityMap.set(asin, listing);
+      }
+      injectConfidenceBadgeForProduct(asin, product.element);
     }
     if (product.brandCertain && product.seller) continue;
 
@@ -932,8 +972,18 @@ function queueDetailEnrichment(products: Product[]): void {
           // Inject seller trust badge
           const sellerTrust = computeSellerTrust(product);
           if (sellerTrust) {
+            sellerTrustMap.set(asin, sellerTrust);
             injectSellerBadge(product.element, sellerTrust);
           }
+
+          // Inject listing integrity
+          const listing = computeListingIntegrity(product);
+          if (listing) {
+            listingIntegrityMap.set(asin, listing);
+          }
+
+          // Inject composite confidence badge
+          injectConfidenceBadgeForProduct(asin, product.element);
         }
 
         if (product.countryOfOrigin) {

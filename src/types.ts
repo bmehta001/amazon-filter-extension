@@ -40,6 +40,10 @@ export interface SellerInfo {
   sellerName: string;
   /** Fulfillment type. */
   fulfillment: FulfillmentType;
+  /** Number of other sellers offering this product (from detail page). */
+  otherSellersCount?: number;
+  /** Lowest price from other sellers, if available. */
+  otherSellersMinPrice?: number;
 }
 
 /** How the product is fulfilled. */
