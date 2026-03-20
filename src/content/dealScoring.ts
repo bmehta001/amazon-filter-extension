@@ -250,11 +250,10 @@ export function computeDealScore(
   // Clamp to 0-100
   totalPoints = Math.max(0, Math.min(100, totalPoints));
 
-  // Compute effective discount (price reduction + coupon combined)
-  const effectiveDiscount = Math.min(
-    99,
-    Math.round(discountPercent + couponPercent * (1 - discountPercent / 100)),
-  );
+  // Compute effective discount (price reduction + coupon combined multiplicatively)
+  const effectiveDiscount = discountPercent >= 99
+    ? 99
+    : Math.min(99, Math.round(discountPercent + couponPercent * (1 - discountPercent / 100)));
 
   // Determine label and color
   const { label, emoji, color } = scoreToLabel(totalPoints, signals);
