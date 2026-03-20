@@ -4,6 +4,8 @@ import { trustBrand, blockBrand } from "../../util/storage";
 import { addToWatchlist, isWatched } from "../../watchlist/storage";
 import { loadShortlists, addToShortlist, createShortlist, isInAnyShortlist } from "../../shortlist/storage";
 import type { ShortlistItem } from "../../shortlist/storage";
+import { addToCompare, isInCompare, removeFromCompare } from "../../compare/storage";
+import type { CompareItem } from "../../compare/storage";
 
 /**
  * Inject per-card action buttons onto a product card.
@@ -237,6 +239,47 @@ export function injectCardActions(
       }, 0);
     });
     container.appendChild(saveBtn);
+
+    // Compare button
+    const compareBtn = createButton("⚖️ Compare", "Add to cross-search comparison");
+    isInCompare(asin).then((inCompare) => {
+      if (inCompare) {
+        compareBtn.textContent = "⚖️ Comparing";
+        compareBtn.style.background = "#e7f4f7";
+      }
+    }).catch(() => { /* ignore */ });
+    compareBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const alreadyIn = await isInCompare(asin);
+      if (alreadyIn) {
+        await removeFromCompare(asin);
+        compareBtn.textContent = "⚖️ Compare";
+        compareBtn.style.background = "";
+        return;
+      }
+      const params = new URLSearchParams(window.location.search);
+      const item: CompareItem = {
+        asin,
+        title: product.title,
+        brand: product.brand,
+        price: product.price,
+        rating: product.rating,
+        reviewCount: product.reviewCount,
+        url: `https://${window.location.hostname}/dp/${asin}`,
+        pinnedAt: Date.now(),
+        searchQuery: params.get("k") ?? "",
+        reviewQuality: product.reviewQuality,
+      };
+      const added = await addToCompare(item);
+      if (added) {
+        compareBtn.textContent = "⚖️ Comparing";
+        compareBtn.style.background = "#e7f4f7";
+      } else {
+        compareBtn.textContent = "⚖️ Full (20)";
+      }
+    });
+    container.appendChild(compareBtn);
   }
 
   // Insert after the title area or at the bottom of the card

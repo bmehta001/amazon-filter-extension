@@ -44,6 +44,8 @@ import { generateReviewSummary, generateSummaryFromTopicScores } from "../review
 import type { ReviewSummary } from "../review/summary";
 import { buildExportRows, exportToCsv, exportToJson, exportToClipboard, downloadFile, getExportFilename } from "./export";
 import type { EnrichmentMaps } from "./export";
+import { loadCompareItems, onCompareChange, resetCompareCache } from "../compare/storage";
+import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
@@ -209,6 +211,10 @@ async function main(): Promise<void> {
   // Show onboarding feature tour on first visit (non-blocking)
   void tryShowFeatureTour();
 
+  // Initialize cross-search comparison tray
+  onCompareChange(renderCompareTray);
+  loadCompareItems().then(renderCompareTray).catch(() => { /* ignore */ });
+
   // Check for product recalls (non-blocking background task)
   void queueRecallCheck();
 
@@ -348,6 +354,8 @@ function watchForSoftNavigation(): void {
       dealScoreExportMap.clear();
       reviewSummaryMap.clear();
       lastVisibleProducts = [];
+      resetCompareCache();
+      destroyCompareTray();
       clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }
