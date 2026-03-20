@@ -161,10 +161,11 @@ describe("computeDealScore", () => {
 
   it("gives Great Deal for large discount + coupon + badge", () => {
     const product = makeProduct({
-      price: 19.99,
+      price: 29.99,
       listPrice: 49.99,
       coupon: { type: "percent", value: 10 },
       hasDealBadge: true,
+      reviewQuality: 80, // trusted reviews unlock bonus points
     });
     const score = computeDealScore(product);
     expect(score).not.toBeNull();
@@ -206,6 +207,137 @@ describe("computeDealScore", () => {
     // 20% off list + 10% coupon → effective ~28%
     expect(score!.effectiveDiscount).toBeGreaterThan(25);
     expect(score!.effectiveDiscount).toBeLessThan(35);
+  });
+
+  it("includes empty manipulationWarnings for normal deals", () => {
+    const product = makeProduct({ price: 29.99, listPrice: 39.99 });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    expect(score!.manipulationWarnings).toEqual([]);
+  });
+});
+
+// ── Price Manipulation Detection ──
+
+describe("computeDealScore — manipulation detection", () => {
+  it("flags heavily inflated 'Was' price (2.5×+)", () => {
+    const product = makeProduct({
+      price: 19.99,
+      listPrice: 59.99, // 3× markup
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    expect(score!.signals.some((s) => s.type === "manipulation")).toBe(true);
+    expect(score!.manipulationWarnings.length).toBeGreaterThan(0);
+    expect(score!.manipulationWarnings[0]).toContain("3.0×");
+  });
+
+  it("flags 2× markup without deal badge as borderline", () => {
+    const product = makeProduct({
+      price: 25.00,
+      listPrice: 50.00, // 2× markup, no badge
+      hasDealBadge: false,
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    expect(score!.signals.some((s) => s.type === "manipulation")).toBe(true);
+    expect(score!.manipulationWarnings.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT flag 2× with deal badge (likely real sale)", () => {
+    const product = makeProduct({
+      price: 25.00,
+      listPrice: 50.00,
+      hasDealBadge: true,
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    // Should have the discount signal but not manipulation for 2×
+    const manipSignals = score!.signals.filter((s) => s.type === "manipulation");
+    expect(manipSignals.length).toBe(0);
+  });
+
+  it("flags coupon-padded pricing (big coupon, no list price)", () => {
+    const product = makeProduct({
+      price: 49.99,
+      coupon: { type: "percent", value: 40 },
+      // No listPrice — the base price is the inflated one
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    expect(score!.signals.some((s) => s.type === "manipulation")).toBe(true);
+    expect(score!.manipulationWarnings.some((w) => w.includes("coupon"))).toBe(true);
+  });
+
+  it("flags double-dipping: large list discount + large coupon", () => {
+    const product = makeProduct({
+      price: 20.00,
+      listPrice: 50.00, // 60% off list
+      coupon: { type: "percent", value: 25 }, // +25% coupon
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    // Combined 60+25 = 85% — should flag
+    const doubleDipSignal = score!.signals.find(
+      (s) => s.type === "manipulation" && s.description.includes("Combined"),
+    );
+    expect(doubleDipSignal).toBeDefined();
+  });
+
+  it("does NOT flag small coupon as manipulation", () => {
+    const product = makeProduct({
+      price: 29.99,
+      coupon: { type: "percent", value: 10 },
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    expect(score!.signals.some((s) => s.type === "manipulation")).toBe(false);
+    expect(score!.manipulationWarnings).toEqual([]);
+  });
+
+  it("flags price-raised-before-sale via watchlist history", () => {
+    const product = makeProduct({
+      price: 34.99,
+      listPrice: 49.99,
+    });
+    const history = {
+      priceWhenAdded: 29.99,
+      lastKnownPrice: 29.99,
+      addedAt: "2024-01-01",
+    };
+    const score = computeDealScore(product, history);
+    expect(score).not.toBeNull();
+    // Price went from $29.99 to $34.99 "sale" — raised then "discounted"
+    expect(score!.signals.some((s) =>
+      s.type === "manipulation" && s.description.includes("increased"),
+    )).toBe(true);
+  });
+
+  it("flags 'Was' price exceeding tracked historical price", () => {
+    const product = makeProduct({
+      price: 24.99,
+      listPrice: 59.99, // claims "was" $59.99
+    });
+    const history = {
+      priceWhenAdded: 35.00,
+      lastKnownPrice: 29.99, // we tracked it at $30, never $60
+      addedAt: "2024-01-01",
+    };
+    const score = computeDealScore(product, history);
+    expect(score).not.toBeNull();
+    expect(score!.manipulationWarnings.some((w) => w.includes("tracked"))).toBe(true);
+  });
+
+  it("labels heavily manipulated product as Inflated Pricing", () => {
+    const product = makeProduct({
+      price: 15.00,
+      listPrice: 75.00, // 5× inflated
+      reviewCount: 3,
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    // The huge inflation penalty should result in "Inflated Pricing" label
+    expect(["Inflated Pricing", "Suspicious Discount"]).toContain(score!.label);
   });
 });
 

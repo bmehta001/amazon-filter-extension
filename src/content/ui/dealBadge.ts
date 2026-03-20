@@ -40,6 +40,11 @@ export const DEAL_BADGE_STYLES = `
     color: #cc0c39;
     border: 1px solid #cc0c39;
   }
+  .bas-deal-badge--inflated {
+    background: #fff3e0;
+    color: #e65100;
+    border: 1px solid #e65100;
+  }
 `;
 
 /**
@@ -70,6 +75,16 @@ export function injectDealBadge(card: HTMLElement, dealScore: DealScore): void {
     (s) => `${s.points > 0 ? "+" : ""}${s.points} ${s.description}`,
   );
   tooltipLines.unshift(`Deal Score: ${dealScore.score}/100`);
+
+  // Append manipulation warnings if any
+  if (dealScore.manipulationWarnings.length > 0) {
+    tooltipLines.push("");
+    tooltipLines.push("⚠️ Price concerns:");
+    for (const warning of dealScore.manipulationWarnings) {
+      tooltipLines.push(`• ${warning}`);
+    }
+  }
+
   badge.title = tooltipLines.join("\n");
 
   priceEl.parentElement?.insertBefore(badge, priceEl.nextSibling);
@@ -85,5 +100,7 @@ function labelToClass(label: DealScore["label"]): string {
       return "bas-deal-badge--normal";
     case "Suspicious Discount":
       return "bas-deal-badge--suspicious";
+    case "Inflated Pricing":
+      return "bas-deal-badge--inflated";
   }
 }
