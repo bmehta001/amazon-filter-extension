@@ -22,6 +22,8 @@ import { injectTrustBadge, TRUST_BADGE_STYLES } from "./ui/trustBadge";
 import { injectSellerBadge, SELLER_BADGE_STYLES } from "./ui/sellerBadge";
 import { injectConfidenceBadge, CONFIDENCE_BADGE_STYLES } from "./ui/confidenceBadge";
 import type { ConfidenceInput } from "./ui/confidenceBadge";
+import { injectDuplicateBadge, DUPLICATE_BADGE_STYLES } from "./ui/duplicateBadge";
+import { detectCrossListingDuplicates } from "./crossListingDedup";
 import { computeTrustScore } from "../review/trustScore";
 import type { TrustScoreResult } from "../review/trustScore";
 import { computeSellerTrust } from "../seller/trust";
@@ -85,6 +87,7 @@ ${RECALL_BADGE_STYLES}
 ${TRUST_BADGE_STYLES}
 ${SELLER_BADGE_STYLES}
 ${CONFIDENCE_BADGE_STYLES}
+${DUPLICATE_BADGE_STYLES}
 ${TOUR_STYLES}
 `;
 
@@ -569,6 +572,17 @@ async function filterAllProducts(): Promise<void> {
   // Sync export data
   lastVisibleProducts = visibleProducts;
   for (const [k, v] of dealScoreMap) dealScoreExportMap.set(k, v);
+
+  // Cross-listing duplicate detection on visible products
+  if (visibleProducts.length >= 2) {
+    const { groups, indexToGroup } = detectCrossListingDuplicates(visibleProducts);
+    for (let vi = 0; vi < visibleProducts.length; vi++) {
+      const groupIdx = indexToGroup.get(vi);
+      if (groupIdx !== undefined) {
+        injectDuplicateBadge(visibleProducts[vi].element, groups[groupIdx], vi, visibleProducts);
+      }
+    }
+  }
 
   // Update stats
   if (filterBarHost) {
