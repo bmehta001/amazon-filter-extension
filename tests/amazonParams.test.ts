@@ -298,5 +298,137 @@ describe("amazonParams", () => {
       const result = parseAdvancedOptions("not-a-url");
       expect(result).toEqual({});
     });
+
+    // ── Roundtrip / symmetry tests (bug fix: rh parsing) ────────────
+
+    it("extracts department from rh param", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&rh=n%3A172282");
+      expect(result.department).toBe("172282");
+    });
+
+    it("extracts minStars from rh param", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&rh=p_72%3A2661618011");
+      expect(result.minStars).toBe("4");
+    });
+
+    it("extracts condition from rh param", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&rh=p_n_condition-type%3ANew");
+      expect(result.condition).toBe("New");
+    });
+
+    it("extracts combined dept + stars + condition from rh", () => {
+      const result = parseAdvancedOptions(
+        "https://www.amazon.com/s?k=test&rh=n%3A172282%2Cp_72%3A2661617011%2Cp_n_condition-type%3AUsed",
+      );
+      expect(result.department).toBe("172282");
+      expect(result.minStars).toBe("3");
+      expect(result.condition).toBe("Used");
+    });
+
+    it("roundtrips all options through build → parse", () => {
+      const opts: AdvancedSearchOptions = {
+        excludeWords: ["cheap", "for kids"],
+        department: "172282",
+        minStars: "4",
+        condition: "New",
+        primeOnly: true,
+        priceMin: 25,
+        priceMax: 150,
+        sort: "price-asc-rank",
+        amazonOnly: true,
+      };
+      const url = buildAdvancedSearchUrl("headphones", opts, BASE);
+      const parsed = parseAdvancedOptions(url);
+      expect(parsed.department).toBe("172282");
+      expect(parsed.minStars).toBe("4");
+      expect(parsed.condition).toBe("New");
+      expect(parsed.primeOnly).toBe(true);
+      expect(parsed.priceMin).toBe(25);
+      expect(parsed.priceMax).toBe(150);
+      expect(parsed.sort).toBe("price-asc-rank");
+      expect(parsed.amazonOnly).toBe(true);
+      expect(parsed.excludeWords).toContain("cheap");
+      expect(parsed.excludeWords).toContain("for kids");
+    });
+
+    it("handles unknown star node ID gracefully", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&rh=p_72%3A9999999");
+      expect(result.minStars).toBe("");
+    });
+
+    it("handles malformed p_36 with non-numeric values", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&p_36=abc-def");
+      expect(result.priceMin).toBeNaN();
+      expect(result.priceMax).toBeNaN();
+    });
+
+    it("handles p_36 with single value (no dash)", () => {
+      const result = parseAdvancedOptions("https://www.amazon.com/s?k=test&p_36=5000");
+      // split("-") yields ["5000"] — maxStr is undefined
+      expect(result.priceMin).toBe(50);
+      expect(result.priceMax).toBeUndefined();
+    });
+  });
+
+  // ── Edge cases for buildAdvancedSearchUrl ────────────────────────
+
+  describe("buildAdvancedSearchUrl edge cases", () => {
+    it("handles zero price min and max", () => {
+      const opts: AdvancedSearchOptions = {
+        ...DEFAULT_ADVANCED_OPTIONS,
+        priceMin: 0,
+        priceMax: 0,
+      };
+      const url = buildAdvancedSearchUrl("test", opts, BASE);
+      expect(new URL(url).searchParams.get("p_36")).toBe("0-0");
+    });
+
+    it("handles very large prices", () => {
+      const opts: AdvancedSearchOptions = {
+        ...DEFAULT_ADVANCED_OPTIONS,
+        priceMin: 10000,
+        priceMax: 99999.99,
+      };
+      const url = buildAdvancedSearchUrl("test", opts, BASE);
+      expect(new URL(url).searchParams.get("p_36")).toBe("1000000-9999999");
+    });
+
+    it("handles whitespace in exclude words", () => {
+      const opts: AdvancedSearchOptions = {
+        ...DEFAULT_ADVANCED_OPTIONS,
+        excludeWords: ["  cheap  ", "fake"],
+      };
+      const url = buildAdvancedSearchUrl("test", opts, BASE);
+      const query = new URL(url).searchParams.get("k")!;
+      expect(query).toContain("-cheap");
+      expect(query).toContain("-fake");
+    });
+
+    it("handles condition without department (via rh)", () => {
+      const opts: AdvancedSearchOptions = {
+        ...DEFAULT_ADVANCED_OPTIONS,
+        condition: "New",
+      };
+      // Condition without dept — no rh generated for condition alone
+      const url = buildAdvancedSearchUrl("test", opts, BASE);
+      // No rh because condition alone isn't handled when dept is empty
+      const parsed = new URL(url);
+      expect(parsed.searchParams.has("rh")).toBe(false);
+    });
+
+    it("handles stars without department", () => {
+      const opts: AdvancedSearchOptions = {
+        ...DEFAULT_ADVANCED_OPTIONS,
+        minStars: "2",
+      };
+      const url = buildAdvancedSearchUrl("test", opts, BASE);
+      expect(new URL(url).searchParams.get("rh")).toBe("p_72:2661616011");
+    });
+
+    it("preserves domain from base URL", () => {
+      const ukBase = "https://www.amazon.co.uk/s?k=test";
+      const url = buildAdvancedSearchUrl("headphones", DEFAULT_ADVANCED_OPTIONS, ukBase);
+      expect(url).toContain("amazon.co.uk");
+    });
   });
 });

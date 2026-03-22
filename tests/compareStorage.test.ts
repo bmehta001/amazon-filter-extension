@@ -187,3 +187,74 @@ describe("resetCompareCache", () => {
     expect(chrome.storage.session.get).toHaveBeenCalledTimes(2);
   });
 });
+
+// ── Edge case tests ─────────────────────────────────────────────────
+
+describe("compare storage edge cases", () => {
+  it("works when chrome is undefined", async () => {
+    (globalThis as any).chrome = undefined;
+    resetCompareCache();
+    const items = await loadCompareItems();
+    expect(items).toEqual([]);
+  });
+
+  it("works when chrome.storage.session is undefined", async () => {
+    (globalThis as any).chrome = { storage: {}, runtime: { lastError: null } };
+    resetCompareCache();
+    const items = await loadCompareItems();
+    expect(items).toEqual([]);
+  });
+
+  it("handles chrome.runtime.lastError on load", async () => {
+    (globalThis as any).chrome.storage.session.get = vi.fn((_key: string, cb: (result: Record<string, unknown>) => void) => {
+      (globalThis as any).chrome.runtime.lastError = { message: "Quota exceeded" };
+      cb({});
+      (globalThis as any).chrome.runtime.lastError = null;
+    });
+    resetCompareCache();
+    const items = await loadCompareItems();
+    expect(items).toEqual([]);
+  });
+
+  it("listener errors do not break other listeners", async () => {
+    const badListener = vi.fn(() => { throw new Error("listener crash"); });
+    const goodListener = vi.fn();
+    onCompareChange(badListener);
+    onCompareChange(goodListener);
+    await addToCompare(makeItem());
+    expect(badListener).toHaveBeenCalledTimes(1);
+    expect(goodListener).toHaveBeenCalledTimes(1);
+  });
+
+  it("item with null price stores correctly", async () => {
+    await addToCompare(makeItem({ price: null }));
+    const items = await loadCompareItems();
+    expect(items[0].price).toBeNull();
+  });
+
+  it("item with empty string fields stores correctly", async () => {
+    await addToCompare(makeItem({ brand: "", title: "", searchQuery: "" }));
+    const items = await loadCompareItems();
+    expect(items[0].brand).toBe("");
+    expect(items[0].title).toBe("");
+    expect(items[0].searchQuery).toBe("");
+  });
+
+  it("removing from empty list does not throw", async () => {
+    await removeFromCompare("NONEXIST");
+    const items = await loadCompareItems();
+    expect(items).toEqual([]);
+  });
+
+  it("clearing an already-empty list does not throw", async () => {
+    await clearCompare();
+    const items = await loadCompareItems();
+    expect(items).toEqual([]);
+  });
+
+  it("isInCompare returns false after clear", async () => {
+    await addToCompare(makeItem());
+    await clearCompare();
+    expect(await isInCompare("B000TEST01")).toBe(false);
+  });
+});

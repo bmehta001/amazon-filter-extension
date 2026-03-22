@@ -326,3 +326,188 @@ describe("DEFAULT_SIMILARITY_THRESHOLD", () => {
     expect(DEFAULT_SIMILARITY_THRESHOLD).toBeLessThan(0.9);
   });
 });
+
+// ── Edge case tests ─────────────────────────────────────────────────
+
+describe("tokenizeTitle edge cases", () => {
+  it("returns empty set for title with only stop words", () => {
+    const tokens = tokenizeTitle("the a an for with in on to by");
+    expect(tokens.size).toBe(0);
+  });
+
+  it("handles empty string", () => {
+    expect(tokenizeTitle("").size).toBe(0);
+  });
+
+  it("handles title with only punctuation", () => {
+    expect(tokenizeTitle("---!!!...???").size).toBe(0);
+  });
+
+  it("filters single-char tokens", () => {
+    const tokens = tokenizeTitle("A B C headphones");
+    expect(tokens.has("a")).toBe(false);
+    expect(tokens.has("b")).toBe(false);
+    expect(tokens.has("headphones")).toBe(true);
+  });
+
+  it("handles tabs and multiple spaces", () => {
+    const tokens = tokenizeTitle("wireless\t\tbluetooth   headphones");
+    expect(tokens.has("wireless")).toBe(true);
+    expect(tokens.has("bluetooth")).toBe(true);
+  });
+
+  it("removes special characters but keeps meaningful tokens", () => {
+    const tokens = tokenizeTitle("Sony WH-1000XM4 (Black)");
+    expect(tokens.has("sony")).toBe(true);
+    expect(tokens.has("wh")).toBe(true);
+    expect(tokens.has("1000xm4")).toBe(true);
+    expect(tokens.has("black")).toBe(true);
+  });
+});
+
+describe("jaccardSimilarity edge cases", () => {
+  it("returns 0 for two empty sets", () => {
+    expect(jaccardSimilarity(new Set(), new Set())).toBe(0);
+  });
+
+  it("returns 0 for one empty and one non-empty set", () => {
+    expect(jaccardSimilarity(new Set(), new Set(["a"]))).toBe(0);
+    expect(jaccardSimilarity(new Set(["a"]), new Set())).toBe(0);
+  });
+
+  it("returns 1 for identical single-element sets", () => {
+    expect(jaccardSimilarity(new Set(["a"]), new Set(["a"]))).toBe(1);
+  });
+
+  it("returns 0 for completely disjoint sets", () => {
+    expect(jaccardSimilarity(new Set(["a", "b"]), new Set(["c", "d"]))).toBe(0);
+  });
+
+  it("calculates correct value for partial overlap", () => {
+    // intersection = {a, b} = 2, union = {a, b, c, d} = 4 → 0.5
+    expect(jaccardSimilarity(new Set(["a", "b", "c"]), new Set(["a", "b", "d"]))).toBeCloseTo(0.5);
+  });
+});
+
+describe("detectCrossListingDuplicates edge cases", () => {
+  it("returns empty for empty product list", () => {
+    const result = detectCrossListingDuplicates([]);
+    expect(result.groups).toHaveLength(0);
+    expect(result.indexToGroup.size).toBe(0);
+  });
+
+  it("returns empty for single product", () => {
+    const result = detectCrossListingDuplicates([makeProduct()]);
+    expect(result.groups).toHaveLength(0);
+  });
+
+  it("skips products with very short titles (< 3 meaningful tokens)", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "Headphones", brand: "TestBrand" }),
+      makeProduct({ asin: "B002", title: "Headphones Pro", brand: "TestBrand" }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups).toHaveLength(0);
+  });
+
+  it("creates multiple independent groups", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "SoundMax Wireless Bluetooth Headphones Noise Cancelling", brand: "SoundMax" }),
+      makeProduct({ asin: "B002", title: "SoundMax Wireless Bluetooth Noise Cancelling Headphones", brand: "SoundMax" }),
+      makeProduct({ asin: "B003", title: "CookPro Stainless Steel Cooking Pot Set Kitchen", brand: "CookPro" }),
+      makeProduct({ asin: "B004", title: "CookPro Stainless Steel Kitchen Cooking Pot Set", brand: "CookPro" }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups).toHaveLength(2);
+    // Verify groups are independent
+    expect(result.indexToGroup.get(0)).not.toBe(result.indexToGroup.get(2));
+  });
+
+  it("picks best by highest rating when reviewCount ties", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "SoundMax Wireless Bluetooth Headphones Noise Cancelling", brand: "SoundMax", reviewCount: 100, rating: 4.0 }),
+      makeProduct({ asin: "B002", title: "SoundMax Wireless Bluetooth Noise Cancelling Headphones", brand: "SoundMax", reviewCount: 100, rating: 4.8 }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups[0].bestIndex).toBe(1); // higher rating
+  });
+
+  it("picks best by lowest price when reviewCount and rating tie", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "SoundMax Wireless Bluetooth Headphones Noise Cancelling", brand: "SoundMax", reviewCount: 100, rating: 4.5, price: 49.99 }),
+      makeProduct({ asin: "B002", title: "SoundMax Wireless Bluetooth Noise Cancelling Headphones", brand: "SoundMax", reviewCount: 100, rating: 4.5, price: 29.99 }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups[0].bestIndex).toBe(1); // lower price
+  });
+
+  it("handles null prices in best selection", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "SoundMax Wireless Bluetooth Headphones Noise Cancelling", brand: "SoundMax", reviewCount: 100, rating: 4.5, price: null }),
+      makeProduct({ asin: "B002", title: "SoundMax Wireless Bluetooth Noise Cancelling Headphones", brand: "SoundMax", reviewCount: 100, rating: 4.5, price: 29.99 }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    // Both null price doesn't trigger price comparison, so first stays best
+    expect(result.groups[0].bestIndex).toBe(0);
+  });
+
+  it("does not group across different brands", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "Wireless Bluetooth Headphones Noise Cancelling Over Ear", brand: "BrandA" }),
+      makeProduct({ asin: "B002", title: "Wireless Bluetooth Headphones Noise Cancelling Over Ear", brand: "BrandB" }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups).toHaveLength(0); // different brands
+  });
+
+  it("groups products with empty brand under __unknown__", () => {
+    const products = [
+      makeProduct({ asin: "B001", title: "Wireless Bluetooth Headphones Noise Cancelling Over Ear", brand: "" }),
+      makeProduct({ asin: "B002", title: "Wireless Bluetooth Noise Cancelling Headphones Over Ear", brand: "" }),
+    ];
+    const result = detectCrossListingDuplicates(products);
+    expect(result.groups).toHaveLength(1);
+  });
+});
+
+describe("duplicateLabel edge cases", () => {
+  it("generates label for group of 5", () => {
+    const products = Array.from({ length: 5 }, (_, i) =>
+      makeProduct({ asin: `B00${i}`, title: `Product ${i}` }),
+    );
+    const group = { bestIndex: 0, memberIndices: [0, 1, 2, 3, 4], similarity: 0.8 };
+    expect(duplicateLabel(group, 0, products)).toContain("Best of 5");
+  });
+
+  it("generates label for exactly 40-char title (no truncation)", () => {
+    const title40 = "A".repeat(40);
+    const products = [
+      makeProduct({ asin: "B001", title: title40 }),
+      makeProduct({ asin: "B002", title: "Other" }),
+    ];
+    const group = { bestIndex: 0, memberIndices: [0, 1], similarity: 0.7 };
+    const label = duplicateLabel(group, 1, products);
+    expect(label).toContain(title40);
+    expect(label).not.toContain("…");
+  });
+
+  it("truncates 41-char title", () => {
+    const title41 = "A".repeat(41);
+    const products = [
+      makeProduct({ asin: "B001", title: title41 }),
+      makeProduct({ asin: "B002", title: "Other" }),
+    ];
+    const group = { bestIndex: 0, memberIndices: [0, 1], similarity: 0.7 };
+    const label = duplicateLabel(group, 1, products);
+    expect(label).toContain("…");
+  });
+
+  it("rounds similarity percentage", () => {
+    const products = [
+      makeProduct({ asin: "B001" }),
+      makeProduct({ asin: "B002" }),
+    ];
+    const group = { bestIndex: 0, memberIndices: [0, 1], similarity: 0.666 };
+    expect(duplicateLabel(group, 0, products)).toContain("67%");
+  });
+});

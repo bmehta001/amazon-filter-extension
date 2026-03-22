@@ -141,3 +141,132 @@ describe("destroyCompareTray", () => {
     expect(() => destroyCompareTray()).not.toThrow();
   });
 });
+
+// ── Edge case tests ─────────────────────────────────────────────────
+
+describe("compareTray edge cases", () => {
+  it("renders item with null price", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001", price: null }),
+      makeItem({ asin: "B002", price: 29.99 }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    const table = document.querySelector(".bas-compare-table")!;
+    const tds = table.querySelectorAll("td");
+    const texts = Array.from(tds).map((td) => td.textContent);
+    expect(texts.some((t) => t === "—")).toBe(true);
+  });
+
+  it("renders item with price = 0", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001", price: 0 }),
+      makeItem({ asin: "B002", price: 29.99 }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    const table = document.querySelector(".bas-compare-table")!;
+    const texts = Array.from(table.querySelectorAll("td")).map((td) => td.textContent);
+    expect(texts.some((t) => t === "$0.00")).toBe(true);
+  });
+
+  it("no best/worst highlighting when all values are equal", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001", price: 29.99, rating: 4.5 }),
+      makeItem({ asin: "B002", price: 29.99, rating: 4.5 }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    // When values are equal, no best/worst
+    const bestCells = document.querySelectorAll(".bas-best");
+    const worstCells = document.querySelectorAll(".bas-worst");
+    // Price and Rating rows have equal values, so no highlighting for those
+    // But reviews may differ or be equal too
+    // If all numeric columns tie, there should be 0 highlighted cells
+    expect(bestCells.length).toBe(0);
+    expect(worstCells.length).toBe(0);
+  });
+
+  it("handles items with null optional enrichment fields", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001", reviewQuality: undefined, trustScore: undefined }),
+      makeItem({ asin: "B002", reviewQuality: undefined, trustScore: undefined }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    const table = document.querySelector(".bas-compare-table")!;
+    const texts = Array.from(table.querySelectorAll("td")).map((td) => td.textContent);
+    // Null enrichment should display as "—"
+    expect(texts.filter((t) => t === "—").length).toBeGreaterThan(0);
+  });
+
+  it("re-renders tray with different items", () => {
+    renderCompareTray([makeItem({ asin: "B001", title: "Alpha" })]);
+    let chips = document.querySelectorAll(".bas-compare-chip");
+    expect(chips).toHaveLength(1);
+
+    renderCompareTray([
+      makeItem({ asin: "B001", title: "Alpha" }),
+      makeItem({ asin: "B002", title: "Beta" }),
+      makeItem({ asin: "B003", title: "Gamma" }),
+    ]);
+    chips = document.querySelectorAll(".bas-compare-chip");
+    expect(chips).toHaveLength(3);
+  });
+
+  it("does not duplicate style element on multiple renders", () => {
+    renderCompareTray([makeItem()]);
+    renderCompareTray([makeItem({ asin: "B002" })]);
+    const styles = document.querySelectorAll("#bas-compare-styles");
+    expect(styles).toHaveLength(1);
+  });
+
+  it("truncates very long titles in chips", () => {
+    const longTitle = "A".repeat(200);
+    renderCompareTray([makeItem({ title: longTitle })]);
+    const chipText = document.querySelector(".bas-compare-chip span:first-child");
+    expect(chipText!.textContent!.length).toBeLessThan(longTitle.length);
+    expect(chipText!.textContent).toContain("…");
+  });
+
+  it("creates title links in comparison table", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001", url: "https://www.amazon.com/dp/B001" }),
+      makeItem({ asin: "B002", url: "https://www.amazon.com/dp/B002" }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    const links = document.querySelectorAll(".bas-compare-title-cell a");
+    expect(links).toHaveLength(2);
+    expect((links[0] as HTMLAnchorElement).href).toContain("B001");
+  });
+
+  it("includes remove row at bottom of table", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001" }),
+      makeItem({ asin: "B002" }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    expandBtn.click();
+    const removeCells = document.querySelectorAll(".bas-compare-remove-col");
+    expect(removeCells).toHaveLength(2);
+    expect(removeCells[0].textContent).toContain("Remove");
+  });
+
+  it("toggles expand/collapse on repeated clicks", () => {
+    renderCompareTray([
+      makeItem({ asin: "B001" }),
+      makeItem({ asin: "B002" }),
+    ]);
+    const expandBtn = document.querySelector(".bas-compare-btn--primary") as HTMLButtonElement;
+    const panel = document.querySelector(".bas-compare-panel")!;
+
+    expandBtn.click();
+    expect(panel.classList.contains("bas-compare-panel--open")).toBe(true);
+    expect(expandBtn.textContent).toContain("Collapse");
+
+    expandBtn.click();
+    expect(panel.classList.contains("bas-compare-panel--open")).toBe(false);
+    expect(expandBtn.textContent).toContain("Compare");
+  });
+});

@@ -118,7 +118,9 @@ export function buildAdvancedSearchUrl(
 
     // Build query with exclusions
     let query = baseQuery.trim();
-    for (const word of options.excludeWords) {
+    for (const rawWord of options.excludeWords) {
+      const word = rawWord.trim();
+      if (!word) continue;
       const exclusion = word.includes(" ") ? `-"${word}"` : `-${word}`;
       if (!query.includes(exclusion)) {
         query += ` ${exclusion}`;
@@ -192,12 +194,22 @@ export function buildAdvancedSearchUrl(
 
 /** Map star rating selection to Amazon's review node ID. */
 function getStarNodeId(stars: string): string {
-  // These are the US marketplace node IDs for review rating filters
   switch (stars) {
     case "4": return "2661618011";
     case "3": return "2661617011";
     case "2": return "2661616011";
     case "1": return "2661615011";
+    default: return "";
+  }
+}
+
+/** Reverse map Amazon's review node ID back to star rating. */
+function starNodeIdToRating(nodeId: string): string {
+  switch (nodeId) {
+    case "2661618011": return "4";
+    case "2661617011": return "3";
+    case "2661616011": return "2";
+    case "2661615011": return "1";
     default: return "";
   }
 }
@@ -236,6 +248,21 @@ export function parseAdvancedOptions(url: string = location.href): Partial<Advan
       const [minStr, maxStr] = priceRange.split("-");
       if (minStr) options.priceMin = parseInt(minStr, 10) / 100;
       if (maxStr) options.priceMax = parseInt(maxStr, 10) / 100;
+    }
+
+    // Parse rh parameter for department, stars, and condition
+    const rh = parsed.searchParams.get("rh");
+    if (rh) {
+      for (const part of rh.split(",")) {
+        const [key, val] = part.split(":");
+        if (key === "n" && val) {
+          options.department = val;
+        } else if (key === "p_72" && val) {
+          options.minStars = starNodeIdToRating(val);
+        } else if (key === "p_n_condition-type" && val) {
+          options.condition = val;
+        }
+      }
     }
 
     return options;

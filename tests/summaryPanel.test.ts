@@ -249,3 +249,207 @@ describe("removeSummaryPanel", () => {
     expect(() => removeSummaryPanel(card)).not.toThrow();
   });
 });
+
+// ── Edge case tests ─────────────────────────────────────────────────
+
+describe("summaryPanel edge cases", () => {
+  it("renders mid-tier rating (3.0 exactly)", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ label: "build quality", avgRating: 3.0, mentions: 3 })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const rating = card.querySelector(".bas-sp-aspect__rating");
+    expect(rating?.classList.contains("bas-sp-aspect__rating--mid")).toBe(true);
+    expect(rating?.textContent).toBe("3.0★");
+  });
+
+  it("renders high-tier rating (4.0 exactly)", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ avgRating: 4.0 })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const rating = card.querySelector(".bas-sp-aspect__rating");
+    expect(rating?.classList.contains("bas-sp-aspect__rating--high")).toBe(true);
+  });
+
+  it("renders low-tier rating (2.9)", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [],
+      cons: [makeAspect({ avgRating: 2.9, sentiment: "negative" })],
+      oneLiner: "👎 sound quality",
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const rating = card.querySelector(".bas-sp-aspect__rating");
+    expect(rating?.classList.contains("bas-sp-aspect__rating--low")).toBe(true);
+  });
+
+  it("renders stable trend indicator", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ trend: "stable" })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const trend = card.querySelector(".bas-sp-aspect__trend");
+    expect(trend?.textContent).toBe("➡️");
+  });
+
+  it("does not render trend when not provided", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ trend: undefined })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const trends = card.querySelectorAll(".bas-sp-aspect__trend");
+    expect(trends).toHaveLength(0);
+  });
+
+  it("no quotes when insights not provided", () => {
+    const card = makeCard();
+    injectSummaryPanel(card, { summary: makeSummary() });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const quotes = card.querySelectorAll(".bas-sp-quote");
+    expect(quotes).toHaveLength(0);
+  });
+
+  it("skips short snippet (<=15 chars) and falls back to sentence search", () => {
+    const card = makeCard();
+    const insights = makeInsights({
+      categorySummaries: [
+        { categoryId: "performance", count: 5, percentage: 30, avgRating: 4.0, sampleSnippet: "Short" },
+      ] as CategorySummary[],
+      categorizedReviews: [
+        {
+          review: { text: "test", rating: 4, date: new Date(), verified: true, helpfulVotes: 0 },
+          categories: ["performance"],
+          primaryCategory: "performance",
+          sentences: [
+            { text: "The sound quality is absolutely amazing and crystal clear", categories: ["performance"], weight: 1 },
+          ],
+          impliedRating: null,
+        },
+      ] as CategorizedReview[],
+    });
+    injectSummaryPanel(card, { summary: makeSummary(), insights });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const quotes = card.querySelectorAll(".bas-sp-quote");
+    // Should find quote via keyword fallback ("sound")
+    expect(quotes.length).toBeGreaterThan(0);
+  });
+
+  it("truncates quotes longer than 120 chars", () => {
+    const card = makeCard();
+    const longSnippet = "A".repeat(150);
+    const insights = makeInsights({
+      categorySummaries: [
+        { categoryId: "performance", count: 5, percentage: 30, avgRating: 4.0, sampleSnippet: longSnippet },
+      ] as CategorySummary[],
+    });
+    injectSummaryPanel(card, { summary: makeSummary(), insights });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const quote = card.querySelector(".bas-sp-quote");
+    // Includes quotes: "...", so text content length > raw text
+    // The raw text inside should be ≤ 120 + "…"
+    expect(quote).toBeTruthy();
+    const rawText = quote!.textContent!.replace(/^"|"$/g, "");
+    expect(rawText.length).toBeLessThanOrEqual(122); // 120 + "…" + potential quote char
+  });
+
+  it("sentiment bar with 0 cons shows full green", () => {
+    const card = makeCard();
+    const summary = makeSummary({ cons: [] });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const posFill = card.querySelector(".bas-sp-sentiment__pos") as HTMLElement;
+    expect(posFill.style.width).toBe("100%");
+    const negFill = card.querySelector(".bas-sp-sentiment__neg") as HTMLElement;
+    expect(negFill.style.width).toBe("0%");
+  });
+
+  it("sentiment bar with 0 pros shows full red", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [],
+      cons: [makeAspect({ sentiment: "negative", avgRating: 2.5 })],
+      oneLiner: "👎 battery",
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const posFill = card.querySelector(".bas-sp-sentiment__pos") as HTMLElement;
+    expect(posFill.style.width).toBe("0%");
+    const negFill = card.querySelector(".bas-sp-sentiment__neg") as HTMLElement;
+    expect(negFill.style.width).toBe("100%");
+  });
+
+  it("inserts after .bas-review-badge anchor if no h2", () => {
+    const card = document.createElement("div");
+    const badge = document.createElement("span");
+    badge.className = "bas-review-badge";
+    card.appendChild(badge);
+    injectSummaryPanel(card, { summary: makeSummary() });
+    expect(badge.nextElementSibling?.classList.contains("bas-review-summary")).toBe(true);
+  });
+
+  it("appends to card when no anchor found", () => {
+    const card = document.createElement("div");
+    injectSummaryPanel(card, { summary: makeSummary() });
+    expect(card.querySelector(".bas-review-summary")).toBeTruthy();
+    expect(card.querySelector(".bas-summary-panel")).toBeTruthy();
+  });
+
+  it("handles aspect with 0 mentions", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ mentions: 0 })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const meta = card.querySelector(".bas-sp-aspect__meta");
+    expect(meta?.textContent).toBe("0×");
+  });
+
+  it("renders rating bar width proportional to rating", () => {
+    const card = makeCard();
+    const summary = makeSummary({
+      pros: [makeAspect({ avgRating: 2.5 })],
+      cons: [],
+    });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    const barFill = card.querySelector(".bas-sp-aspect__fill") as HTMLElement;
+    expect(barFill.style.width).toBe("50%"); // 2.5/5 * 100
+  });
+
+  it("no sentiment bar when both pros and cons are empty", () => {
+    const card = makeCard();
+    const summary = makeSummary({ pros: [], cons: [], oneLiner: "Neutral" });
+    injectSummaryPanel(card, { summary });
+    const oneLiner = card.querySelector(".bas-review-summary") as HTMLElement;
+    oneLiner.click();
+    expect(card.querySelector(".bas-sp-sentiment")).toBeNull();
+  });
+});

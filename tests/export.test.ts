@@ -259,3 +259,122 @@ describe("getExportFilename", () => {
     expect(name).not.toMatch(/[^a-zA-Z0-9._-]/);
   });
 });
+
+// ── Edge case tests ─────────────────────────────────────────────────
+
+describe("buildExportRows edge cases", () => {
+  it("filters products with asin = undefined", () => {
+    const rows = buildExportRows([makeProduct({ asin: undefined })], emptyMaps());
+    expect(rows).toHaveLength(0);
+  });
+
+  it("handles empty product list", () => {
+    const rows = buildExportRows([], emptyMaps());
+    expect(rows).toHaveLength(0);
+  });
+
+  it("handles product with price = 0", () => {
+    const rows = buildExportRows([makeProduct({ price: 0 })], emptyMaps());
+    expect(rows[0].price).toBe(0);
+  });
+
+  it("handles product with empty string brand", () => {
+    const rows = buildExportRows([makeProduct({ brand: "" })], emptyMaps());
+    expect(rows[0].brand).toBe("");
+  });
+
+  it("handles product with no seller", () => {
+    const rows = buildExportRows([makeProduct({ seller: undefined })], emptyMaps());
+    expect(rows[0].seller).toBe("");
+    expect(rows[0].fulfillment).toBe("");
+  });
+
+  it("prefers product countryOfOrigin over originMap", () => {
+    const maps = emptyMaps();
+    maps.originMap.set("B000TEST01", "Japan");
+    const rows = buildExportRows([makeProduct({ countryOfOrigin: "China" })], maps);
+    expect(rows[0].countryOfOrigin).toBe("China");
+  });
+
+  it("falls back to originMap when product has no countryOfOrigin", () => {
+    const maps = emptyMaps();
+    maps.originMap.set("B000TEST01", "Germany");
+    const rows = buildExportRows([makeProduct()], maps);
+    expect(rows[0].countryOfOrigin).toBe("Germany");
+  });
+
+  it("handles dealScore of 0 (not null)", () => {
+    const maps = emptyMaps();
+    maps.dealScoreMap.set("B000TEST01", 0);
+    const rows = buildExportRows([makeProduct()], maps);
+    expect(rows[0].dealScore).toBe(0);
+  });
+});
+
+describe("exportToCsv edge cases", () => {
+  it("escapes newlines in field values", () => {
+    const row: ExportRow = {
+      asin: "B001", title: "Line1\nLine2", brand: "B", price: 10,
+      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
+      trustScore: null, sellerTrust: null, listingIntegrity: null,
+      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+    };
+    const csv = exportToCsv([row]);
+    // Newline in value must be inside quotes
+    expect(csv).toContain('"Line1\nLine2"');
+  });
+
+  it("escapes combined commas, quotes, and newlines", () => {
+    const row: ExportRow = {
+      asin: "B001", title: 'He said, "wow"\nAmazing', brand: "B", price: 10,
+      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
+      trustScore: null, sellerTrust: null, listingIntegrity: null,
+      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+    };
+    const csv = exportToCsv([row]);
+    expect(csv).toContain('"He said, ""wow""\nAmazing"');
+  });
+
+  it("converts isSponsored=false to No", () => {
+    const rows = buildExportRows([makeProduct({ isSponsored: false })], emptyMaps());
+    const csv = exportToCsv(rows);
+    expect(csv).toContain("No");
+  });
+});
+
+describe("exportToClipboard edge cases", () => {
+  it("handles empty rows array", () => {
+    const tsv = exportToClipboard([]);
+    const lines = tsv.split("\n");
+    expect(lines).toHaveLength(1); // header only
+  });
+
+  it("does not escape tabs in values (raw TSV)", () => {
+    const row: ExportRow = {
+      asin: "B001", title: "Tab\there", brand: "B", price: 10,
+      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
+      trustScore: null, sellerTrust: null, listingIntegrity: null,
+      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+    };
+    const tsv = exportToClipboard([row]);
+    // Tab in title will create extra columns (expected limitation)
+    const cols = tsv.split("\n")[1].split("\t");
+    expect(cols.length).toBeGreaterThan(18); // header has 18 cols, extra from embedded tab
+  });
+});
+
+describe("getExportFilename edge cases", () => {
+  it("truncates very long queries to 40 chars", () => {
+    Object.defineProperty(window, "location", {
+      value: { search: "?k=" + "a".repeat(100) },
+      writable: true,
+    });
+    const name = getExportFilename("csv");
+    // amazon_ prefix + 40 chars max + _date + .csv
+    const queryPart = name.replace(/^amazon_/, "").replace(/_\d{4}-\d{2}-\d{2}\.csv$/, "");
+    expect(queryPart.length).toBeLessThanOrEqual(40);
+  });
+});
