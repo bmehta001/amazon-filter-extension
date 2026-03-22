@@ -48,6 +48,8 @@ import { buildExportRows, exportToCsv, exportToJson, exportToClipboard, download
 import type { EnrichmentMaps } from "./export";
 import { loadCompareItems, onCompareChange, resetCompareCache } from "../compare/storage";
 import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
+import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
+import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
@@ -55,21 +57,7 @@ import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
 // CSS classes for product card visual states
-const REVIEW_SUMMARY_STYLES = `
-  .bas-review-summary {
-    font-size: 11px;
-    color: #565959;
-    padding: 3px 0;
-    line-height: 1.4;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bas-review-summary:hover {
-    white-space: normal;
-  }
-`;
+const REVIEW_SUMMARY_STYLES = SUMMARY_PANEL_STYLES;
 
 const GLOBAL_STYLES = `
   .bas-hidden { display: none !important; }
@@ -952,7 +940,8 @@ function queueReviewAnalysis(products: Product[]): void {
             ? generateSummaryFromTopicScores(insights.topicScores)
             : generateReviewSummary(reviewData.reviews);
           if (summary) {
-            if (summary.oneLiner) injectReviewSummary(product.element, summary.oneLiner);
+            const panelData: SummaryPanelData = { summary, insights };
+            injectSummaryPanel(product.element, panelData);
             reviewSummaryMap.set(asin, summary);
           }
         }
@@ -1113,22 +1102,6 @@ function updateOriginDisplay(product: Product): void {
   const actionBar = product.element.querySelector(".bas-card-actions");
   if (actionBar) {
     actionBar.appendChild(badge);
-  }
-}
-
-/** Inject a one-line review summary (pros/cons) on a product card. */
-function injectReviewSummary(card: HTMLElement, oneLiner: string): void {
-  if (card.querySelector(".bas-review-summary")) return;
-  const el = document.createElement("div");
-  el.className = "bas-review-summary";
-  el.textContent = oneLiner;
-  el.title = oneLiner; // full text on hover
-  // Insert after review badge or action bar
-  const anchor = card.querySelector(".bas-review-badge, .bas-card-actions, h2");
-  if (anchor) {
-    anchor.parentElement?.insertBefore(el, anchor.nextSibling);
-  } else {
-    card.appendChild(el);
   }
 }
 
