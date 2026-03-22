@@ -346,6 +346,9 @@ function watchForSoftNavigation(): void {
       listingIntegrityMap.clear();
       dealScoreExportMap.clear();
       reviewSummaryMap.clear();
+      reviewScoreMap.clear();
+      productInsightsMap.clear();
+      reviewDataMap.clear();
       lastVisibleProducts = [];
       resetCompareCache();
       destroyCompareTray();

@@ -196,8 +196,10 @@ export function isPaginationActive(): boolean {
 
 /**
  * Remove all paginated cards from the DOM.
+ * Also stops any active pagination to prevent race conditions.
  */
 export function removePaginatedCards(): void {
+  paginationActive = false;
   const paginated = document.querySelectorAll('[data-bas-paginated="true"]');
   for (const card of paginated) {
     card.remove();

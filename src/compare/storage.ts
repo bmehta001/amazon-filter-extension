@@ -47,12 +47,11 @@ function notifyListeners(items: CompareItem[]): void {
 /** Load compare items from chrome.storage.session. */
 export async function loadCompareItems(): Promise<CompareItem[]> {
   if (cache !== null) return cache;
+  if (typeof chrome === "undefined" || !chrome.storage?.session) {
+    cache = [];
+    return [];
+  }
   return new Promise((resolve) => {
-    if (typeof chrome === "undefined" || !chrome.storage?.session) {
-      cache = [];
-      resolve([]);
-      return;
-    }
     chrome.storage.session.get(STORAGE_KEY, (result) => {
       if (chrome.runtime.lastError) {
         console.warn("[BAS] Compare load error:", chrome.runtime.lastError.message);
@@ -70,11 +69,10 @@ export async function loadCompareItems(): Promise<CompareItem[]> {
 async function saveCompareItems(items: CompareItem[]): Promise<void> {
   cache = items;
   notifyListeners(items);
+  if (typeof chrome === "undefined" || !chrome.storage?.session) {
+    return;
+  }
   return new Promise((resolve, reject) => {
-    if (typeof chrome === "undefined" || !chrome.storage?.session) {
-      resolve();
-      return;
-    }
     chrome.storage.session.set({ [STORAGE_KEY]: items }, () => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
