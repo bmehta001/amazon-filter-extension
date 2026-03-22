@@ -3,6 +3,7 @@ import { DEFAULT_FILTERS } from "../../types";
 import filterBarStyles from "./filterBar.css?inline";
 import { REVIEW_CATEGORIES } from "../../review/categories";
 import { DEDUP_CATEGORIES } from "../dedup";
+import { createAdvancedSearchToggle } from "./advancedSearch";
 
 export interface FilterBarCallbacks {
   onFilterChange: (state: FilterState) => void;
@@ -445,6 +446,9 @@ export function createFilterBar(
   exportWrapper.appendChild(exportBtn);
   exportWrapper.appendChild(exportMenu);
   helpersGroup.appendChild(exportWrapper);
+
+  // Advanced Search toggle
+  helpersGroup.appendChild(createAdvancedSearchToggle());
 
   bar.appendChild(helpersGroup);
 

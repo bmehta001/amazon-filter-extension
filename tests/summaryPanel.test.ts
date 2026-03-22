@@ -41,7 +41,7 @@ function makeInsights(overrides: Partial<ProductInsights> = {}): ProductInsights
     ] as CategorySummary[],
     categorizedReviews: [
       {
-        review: { text: "Amazing sound quality, love the deep bass and clear treble", rating: 5, date: null, verified: true, helpfulVotes: 3 },
+        review: { text: "Amazing sound quality, love the deep bass and clear treble", rating: 5, date: new Date("2024-01-01"), verified: true, helpfulVotes: 3 },
         categories: ["performance"],
         primaryCategory: "performance",
         sentences: [

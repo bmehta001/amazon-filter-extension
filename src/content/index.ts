@@ -50,6 +50,7 @@ import { loadCompareItems, onCompareChange, resetCompareCache } from "../compare
 import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
+import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
@@ -77,6 +78,7 @@ ${SELLER_BADGE_STYLES}
 ${CONFIDENCE_BADGE_STYLES}
 ${DUPLICATE_BADGE_STYLES}
 ${TOUR_STYLES}
+${ADVANCED_SEARCH_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -347,6 +349,7 @@ function watchForSoftNavigation(): void {
       lastVisibleProducts = [];
       resetCompareCache();
       destroyCompareTray();
+      destroyAdvancedSearch();
       clearRecallCache();
       void injectFilterBar().then(() => filterAllProducts());
     }

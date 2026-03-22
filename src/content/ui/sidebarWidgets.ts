@@ -18,6 +18,7 @@ import { DEFAULT_FILTERS } from "../../types";
 import { REVIEW_CATEGORIES } from "../../review/categories";
 import { DEDUP_CATEGORIES } from "../dedup";
 import sidebarWidgetStyles from "./sidebarWidgets.css?inline";
+import { createAdvancedSearchToggle } from "./advancedSearch";
 
 export interface DistributedCallbacks {
   onFilterChange: (state: FilterState) => void;
@@ -174,6 +175,7 @@ export function createDistributedFilters(
     exportWrapper.appendChild(exportBtn);
     exportWrapper.appendChild(exportMenu);
     actionsGroup.append(exportWrapper);
+    actionsGroup.append(createAdvancedSearchToggle());
     container.appendChild(actionsGroup);
 
     // Sort
