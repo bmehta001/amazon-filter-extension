@@ -4,6 +4,8 @@ import {
   stopPagination,
   removePaginatedCards,
   updateNextPageLink,
+  getLastFetchedPage,
+  getMaxAvailablePages,
 } from "../src/content/paginator";
 
 describe("paginator", () => {
@@ -56,15 +58,18 @@ describe("paginator", () => {
     expect(document.querySelectorAll('[data-bas-paginated="true"]').length).toBe(0);
   });
 
-  it("multiple calls to removePaginatedCards() are safe", () => {
-    const card = document.createElement("div");
-    card.dataset.basPaginated = "true";
-    document.body.appendChild(card);
-
+  it("removePaginatedCards() resets lastFetchedPage", () => {
     removePaginatedCards();
-    expect(() => removePaginatedCards()).not.toThrow();
+    expect(getLastFetchedPage()).toBe(0);
+  });
 
-    expect(document.querySelectorAll('[data-bas-paginated="true"]').length).toBe(0);
+  it("getLastFetchedPage() returns 0 initially after clear", () => {
+    removePaginatedCards();
+    expect(getLastFetchedPage()).toBe(0);
+  });
+
+  it("getMaxAvailablePages() returns at least 1", () => {
+    expect(getMaxAvailablePages()).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -92,5 +97,19 @@ describe("updateNextPageLink", () => {
     const link = document.querySelector<HTMLAnchorElement>(".s-pagination-next")!;
     const url = new URL(link.href);
     expect(url.searchParams.get("page")).toBe("2");
+  });
+});
+
+describe("rate-limited fetcher idle API", () => {
+  it("review fetcher isIdle() returns true when freshly created", async () => {
+    const { createRateLimitedFetcher } = await import("../src/review/fetcher");
+    const fetcher = createRateLimitedFetcher(2, 100);
+    expect(fetcher.isIdle()).toBe(true);
+  });
+
+  it("detail fetcher isIdle() returns true when freshly created", async () => {
+    const { createRateLimitedDetailFetcher } = await import("../src/brand/fetcher");
+    const fetcher = createRateLimitedDetailFetcher(2, 100);
+    expect(fetcher.isIdle()).toBe(true);
   });
 });

@@ -401,10 +401,16 @@ function isAmazonSeller(name: string): boolean {
  * Create a rate-limited product detail fetcher.
  * Returns both brand and seller from a single fetch.
  */
+/** Rate-limited fetcher with idle detection. */
+export interface RateLimitedDetailFetcher {
+  fetch: (asin: string) => Promise<ProductDetailResult>;
+  isIdle: () => boolean;
+}
+
 export function createRateLimitedDetailFetcher(
   maxConcurrent = 3,
   delayMs = 500,
-): (asin: string) => Promise<ProductDetailResult> {
+): RateLimitedDetailFetcher {
   let active = 0;
   const queue: Array<{ asin: string; resolve: (v: ProductDetailResult) => void }> = [];
 
@@ -428,11 +434,14 @@ export function createRateLimitedDetailFetcher(
     }
   }
 
-  return (asin: string): Promise<ProductDetailResult> => {
-    return new Promise((resolve) => {
-      queue.push({ asin, resolve });
-      void processNext();
-    });
+  return {
+    fetch: (asin: string): Promise<ProductDetailResult> => {
+      return new Promise((resolve) => {
+        queue.push({ asin, resolve });
+        void processNext();
+      });
+    },
+    isIdle: () => active === 0 && queue.length === 0,
   };
 }
 

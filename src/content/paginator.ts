@@ -1,7 +1,7 @@
 import { getProductCards } from "./extractor";
 
 const TAG = "[BAS]";
-const MAX_PAGES = 20;
+const MAX_PAGES = 50;
 const FETCH_DELAY_MS = 800;
 const PRODUCT_CARD_SELECTOR = 'div[data-component-type="s-search-result"]';
 
@@ -85,6 +85,8 @@ function delay(ms: number): Promise<void> {
 
 let paginationActive = false;
 const seenAsins = new Set<string>();
+/** Last page number successfully fetched (for continuation). */
+let lastFetchedPage = 0;
 
 /**
  * Update Amazon's "Next" pagination link to skip past prefetched pages.
@@ -134,6 +136,7 @@ export async function startPagination(
   }
 
   const currentPage = getCurrentPage();
+  if (lastFetchedPage < currentPage) lastFetchedPage = currentPage;
   const startPage = currentPage + 1;
   const endPage = Math.min(startPage + pagesToFetch - 1, detectMaxPages());
 
@@ -164,6 +167,7 @@ export async function startPagination(
     }
 
     totalProducts += injectedCount;
+    lastFetchedPage = page;
     console.log(TAG, `Page ${page}: +${injectedCount} products (${totalProducts} total)`);
 
     onStatus({
@@ -194,12 +198,91 @@ export function isPaginationActive(): boolean {
   return paginationActive;
 }
 
+/** Last page number that was successfully fetched. */
+export function getLastFetchedPage(): number {
+  return lastFetchedPage;
+}
+
+/** Maximum page number Amazon reports for this query. */
+export function getMaxAvailablePages(): number {
+  return detectMaxPages();
+}
+
+/**
+ * Continue pagination from where we left off.
+ * Fetches the next `batchSize` pages starting after `lastFetchedPage`.
+ * Returns true if more pages remain after this batch.
+ */
+export async function continuePagination(
+  onStatus: (status: PaginationStatus) => void,
+  batchSize: number,
+): Promise<boolean> {
+  if (paginationActive) return true;
+  paginationActive = true;
+
+  const container = findResultsContainer();
+  if (!container) {
+    paginationActive = false;
+    return false;
+  }
+
+  const maxPage = detectMaxPages();
+  const startPage = lastFetchedPage + 1;
+  const endPage = Math.min(startPage + batchSize - 1, maxPage);
+
+  if (startPage > maxPage) {
+    paginationActive = false;
+    return false;
+  }
+
+  const existingCards = getProductCards();
+  let totalProducts = existingCards.length;
+
+  console.log(TAG, `Prefetch continuation: pages ${startPage}–${endPage}`);
+
+  for (let page = startPage; page <= endPage; page++) {
+    if (!paginationActive) break;
+
+    const pageUrl = buildPageUrl(page);
+    const cards = await fetchPageCards(pageUrl);
+
+    let injectedCount = 0;
+    for (const card of cards) {
+      const asin = card.dataset.asin;
+      if (asin && seenAsins.has(asin)) continue;
+      if (asin) seenAsins.add(asin);
+      container.appendChild(card);
+      injectedCount++;
+    }
+
+    totalProducts += injectedCount;
+    lastFetchedPage = page;
+
+    onStatus({
+      currentPage: page,
+      totalPages: endPage,
+      totalProducts,
+      done: page === endPage,
+    });
+
+    if (page < endPage) {
+      await delay(FETCH_DELAY_MS);
+    }
+  }
+
+  paginationActive = false;
+  updateNextPageLink(lastFetchedPage);
+
+  return lastFetchedPage < maxPage;
+}
+
 /**
  * Remove all paginated cards from the DOM.
  * Also stops any active pagination to prevent race conditions.
  */
 export function removePaginatedCards(): void {
   paginationActive = false;
+  lastFetchedPage = 0;
   const paginated = document.querySelectorAll('[data-bas-paginated="true"]');
   for (const card of paginated) {
     card.remove();

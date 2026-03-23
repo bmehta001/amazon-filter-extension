@@ -198,10 +198,16 @@ export async function fetchProductReviewData(asin: string): Promise<ProductRevie
 // Rate-limited fetcher
 // ---------------------------------------------------------------------------
 
+/** Rate-limited fetcher with idle detection. */
+export interface RateLimitedFetcher<T> {
+  fetch: (asin: string) => Promise<T>;
+  isIdle: () => boolean;
+}
+
 export function createRateLimitedFetcher(
   maxConcurrent = 2,
   delayMs = 500,
-): (asin: string) => Promise<ProductReviewData> {
+): RateLimitedFetcher<ProductReviewData> {
   let active = 0;
   const queue: Array<{ asin: string; resolve: (v: ProductReviewData) => void }> = [];
 
@@ -215,7 +221,6 @@ export function createRateLimitedFetcher(
       const result = await fetchProductReviewData(item.asin);
       item.resolve(result);
     } catch {
-      // fetchProductReviewData already handles errors internally
       item.resolve({
         asin: item.asin,
         histogram: null,
@@ -236,10 +241,13 @@ export function createRateLimitedFetcher(
     return new Promise((r) => setTimeout(r, ms));
   }
 
-  return (asin: string): Promise<ProductReviewData> => {
-    return new Promise((resolve) => {
-      queue.push({ asin, resolve });
-      void processNext();
-    });
+  return {
+    fetch: (asin: string): Promise<ProductReviewData> => {
+      return new Promise((resolve) => {
+        queue.push({ asin, resolve });
+        void processNext();
+      });
+    },
+    isIdle: () => active === 0 && queue.length === 0,
   };
 }

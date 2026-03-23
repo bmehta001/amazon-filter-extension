@@ -36,7 +36,7 @@ import { buildFilterReasons, createTransparencyTooltip, TRANSPARENCY_STYLES } fr
 import type { PageStats } from "./ui/transparencyTooltip";
 import { tryShowFeatureTour, TOUR_STYLES } from "./ui/featureTour";
 import { startObserving, stopObserving, refilterAll, updateObserverFilters } from "./observer";
-import { startPagination, stopPagination, removePaginatedCards } from "./paginator";
+import { startPagination, stopPagination, removePaginatedCards, continuePagination, isPaginationActive } from "./paginator";
 import { findDuplicates } from "./dedup";
 import { createRateLimitedFetcher } from "../review/fetcher";
 import { computeReviewScore, computeReviewScoreWithML } from "../review/analyzer";
@@ -444,6 +444,7 @@ function cleanupSoftNavigation(): void {
     sidebarNavObserver.disconnect();
     sidebarNavObserver = null;
   }
+  clearIdlePrefetch();
 }
 
 /**
@@ -691,20 +692,72 @@ function startBackgroundPagination(): void {
   const pagesToFetch = currentFilters.totalPages - 1;
 
   void startPagination(
-    (status) => {
-      if (filterBarHost) {
-        const statusText = status.done
-          ? `✓ ${status.totalProducts} items`
-          : `Loading… ${status.totalProducts} items`;
-        if (isDistributedMode) {
-          updateDistributedPrefetchStatus(filterBarHost, statusText);
-        } else {
-          updatePrefetchStatus(filterBarHost, statusText);
-        }
-      }
-    },
+    paginationStatusCallback,
     pagesToFetch,
-  );
+  ).then(() => {
+    // Once the user-requested batch is done, start idle-triggered prefetch
+    scheduleIdlePrefetch();
+  });
+}
+
+/** Shared pagination status callback for filter bar updates. */
+function paginationStatusCallback(status: import("./paginator").PaginationStatus): void {
+  if (filterBarHost) {
+    const statusText = status.done
+      ? `✓ ${status.totalProducts} items`
+      : `Loading… ${status.totalProducts} items`;
+    if (isDistributedMode) {
+      updateDistributedPrefetchStatus(filterBarHost, statusText);
+    } else {
+      updatePrefetchStatus(filterBarHost, statusText);
+    }
+  }
+}
+
+/** Timer ID for idle prefetch polling. */
+let idlePrefetchTimer: ReturnType<typeof setInterval> | null = null;
+/** How many pages to fetch per idle prefetch batch. */
+const IDLE_PREFETCH_BATCH = 5;
+/** How often to check if queues are idle (ms). */
+const IDLE_CHECK_INTERVAL = 3000;
+
+/**
+ * Schedule idle-triggered prefetch: when both review and detail queues
+ * are idle and no pagination is active, fetch the next batch of pages.
+ * Stops automatically when Amazon runs out of pages.
+ */
+function scheduleIdlePrefetch(): void {
+  clearIdlePrefetch();
+
+  idlePrefetchTimer = setInterval(() => {
+    // Don't prefetch if user disabled multi-page or pagination is already running
+    if (currentFilters.totalPages <= 1 || isPaginationActive()) return;
+
+    // Wait until enrichment queues are idle
+    if (!fetchReview.isIdle() || !fetchDetails.isIdle()) return;
+
+    console.log("[BAS] Enrichment queues idle — starting prefetch continuation");
+    clearIdlePrefetch(); // pause timer while fetching
+
+    void continuePagination(paginationStatusCallback, IDLE_PREFETCH_BATCH).then((hasMore) => {
+      // Re-apply filters to newly injected cards
+      void filterAllProducts();
+
+      if (hasMore) {
+        // More pages remain — schedule another idle check
+        scheduleIdlePrefetch();
+      } else {
+        console.log("[BAS] All available pages prefetched");
+      }
+    });
+  }, IDLE_CHECK_INTERVAL);
+}
+
+function clearIdlePrefetch(): void {
+  if (idlePrefetchTimer !== null) {
+    clearInterval(idlePrefetchTimer);
+    idlePrefetchTimer = null;
+  }
 }
 
 /**
@@ -739,6 +792,7 @@ function handleFilterChange(newState: FilterState): void {
   // Handle result count changes — reset and re-prefetch
   if (prefetchChanged) {
     stopPagination();
+    clearIdlePrefetch();
     removePaginatedCards();
     if (newState.totalPages > 1) {
       startBackgroundPagination();
@@ -972,7 +1026,7 @@ function queueReviewAnalysis(products: Product[]): void {
         let reviewData: ProductReviewData | null = null;
         if (!score) {
           // Fetch and analyze
-          reviewData = await fetchReview(asin);
+          reviewData = await fetchReview.fetch(asin);
           // Only score if we got meaningful data
           if (reviewData.histogram || reviewData.reviews.length > 0) {
             score = currentFilters.useMLAnalysis
@@ -1087,7 +1141,7 @@ function queueDetailEnrichment(products: Product[]): void {
 
         // If we still need brand or seller, fetch the detail page
         if ((!brand && !product.brandCertain) || !product.seller) {
-          const details = await fetchDetails(asin);
+          const details = await fetchDetails.fetch(asin);
 
           if (!brand && details.brand) {
             brand = details.brand;
