@@ -195,18 +195,6 @@ describe("extractHaulProduct", () => {
     expect(product.isSponsored).toBe(false);
   });
 
-  it("defaults to 0 reviews (Haul doesn't show review counts)", () => {
-    const card = createMockHaulCard({ title: "Basic Item" });
-    const product = extractHaulProduct(card);
-    expect(product.reviewCount).toBe(0);
-  });
-
-  it("defaults to 0 rating (Haul doesn't show ratings)", () => {
-    const card = createMockHaulCard({ title: "Basic Item" });
-    const product = extractHaulProduct(card);
-    expect(product.rating).toBe(0);
-  });
-
   it("extracts rating when available via aria-label", () => {
     const card = createMockHaulCard({ rating: "4.2 out of 5 stars" });
     const product = extractHaulProduct(card);

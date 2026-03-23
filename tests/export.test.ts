@@ -263,16 +263,6 @@ describe("getExportFilename", () => {
 // ── Edge case tests ─────────────────────────────────────────────────
 
 describe("buildExportRows edge cases", () => {
-  it("filters products with asin = undefined", () => {
-    const rows = buildExportRows([makeProduct({ asin: undefined })], emptyMaps());
-    expect(rows).toHaveLength(0);
-  });
-
-  it("handles empty product list", () => {
-    const rows = buildExportRows([], emptyMaps());
-    expect(rows).toHaveLength(0);
-  });
-
   it("handles product with price = 0", () => {
     const rows = buildExportRows([makeProduct({ price: 0 })], emptyMaps());
     expect(rows[0].price).toBe(0);

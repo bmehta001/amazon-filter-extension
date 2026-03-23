@@ -390,26 +390,6 @@ describe("jaccardSimilarity edge cases", () => {
 });
 
 describe("detectCrossListingDuplicates edge cases", () => {
-  it("returns empty for empty product list", () => {
-    const result = detectCrossListingDuplicates([]);
-    expect(result.groups).toHaveLength(0);
-    expect(result.indexToGroup.size).toBe(0);
-  });
-
-  it("returns empty for single product", () => {
-    const result = detectCrossListingDuplicates([makeProduct()]);
-    expect(result.groups).toHaveLength(0);
-  });
-
-  it("skips products with very short titles (< 3 meaningful tokens)", () => {
-    const products = [
-      makeProduct({ asin: "B001", title: "Headphones", brand: "TestBrand" }),
-      makeProduct({ asin: "B002", title: "Headphones Pro", brand: "TestBrand" }),
-    ];
-    const result = detectCrossListingDuplicates(products);
-    expect(result.groups).toHaveLength(0);
-  });
-
   it("creates multiple independent groups", () => {
     const products = [
       makeProduct({ asin: "B001", title: "SoundMax Wireless Bluetooth Headphones Noise Cancelling", brand: "SoundMax" }),

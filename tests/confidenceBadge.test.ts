@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   injectConfidenceBadge,
   removeConfidenceBadge,
-  CONFIDENCE_BADGE_STYLES,
 } from "../src/content/ui/confidenceBadge";
 import type { ConfidenceInput } from "../src/content/ui/confidenceBadge";
 import type { TrustScoreResult } from "../src/review/trustScore";
@@ -132,14 +131,5 @@ describe("removeConfidenceBadge", () => {
     expect(card.querySelector(".bas-confidence")).not.toBeNull();
     removeConfidenceBadge(card);
     expect(card.querySelector(".bas-confidence")).toBeNull();
-  });
-});
-
-describe("CONFIDENCE_BADGE_STYLES", () => {
-  it("exports non-empty CSS", () => {
-    expect(CONFIDENCE_BADGE_STYLES.length).toBeGreaterThan(50);
-    expect(CONFIDENCE_BADGE_STYLES).toContain("bas-confidence");
-    expect(CONFIDENCE_BADGE_STYLES).toContain("--green");
-    expect(CONFIDENCE_BADGE_STYLES).toContain("--red");
   });
 });

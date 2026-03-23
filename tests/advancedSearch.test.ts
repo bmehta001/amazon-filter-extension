@@ -5,7 +5,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createAdvancedSearchToggle,
   destroyAdvancedSearch,
-  ADVANCED_SEARCH_STYLES,
 } from "../src/content/ui/advancedSearch";
 
 // Mock location so URL parsing works
@@ -27,14 +26,6 @@ describe("advancedSearch UI", () => {
 
   afterEach(() => {
     destroyAdvancedSearch();
-  });
-
-  it("exports CSS styles string", () => {
-    expect(typeof ADVANCED_SEARCH_STYLES).toBe("string");
-    expect(ADVANCED_SEARCH_STYLES).toContain(".bas-adv-panel");
-    expect(ADVANCED_SEARCH_STYLES).toContain(".bas-adv-toggle");
-    expect(ADVANCED_SEARCH_STYLES).toContain(".bas-adv-overlay");
-    expect(ADVANCED_SEARCH_STYLES).toContain(".bas-adv-btn--primary");
   });
 
   it("creates a toggle button", () => {

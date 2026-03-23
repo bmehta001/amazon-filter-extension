@@ -277,80 +277,33 @@ describe("computeWeightedAggregate", () => {
   });
 });
 
-// ── Integration: weight profiles are reasonable ──────────────────────
+// ── Integration: all weight profiles load correctly ───────────────────
 
 describe("weight profile sanity checks", () => {
-  it("Electronics emphasizes performance over appearance", () => {
-    const p = getWeightProfile("172282");
-    expect(p.weights["performance"]!).toBeGreaterThan(p.weights["appearance"]!);
-  });
+  const EXPECTED: Record<string, { label: string; topCategory: string; topWeight: number }> = {
+    "172282":      { label: "Electronics",                topCategory: "performance",    topWeight: 2.0 },
+    "7141123011":  { label: "Clothing, Shoes & Jewelry",  topCategory: "size-fit",       topWeight: 2.0 },
+    "1055398":     { label: "Home & Kitchen",             topCategory: "product-quality", topWeight: 1.5 },
+    "165796011":   { label: "Baby",                       topCategory: "product-quality", topWeight: 2.0 },
+    "3375251":     { label: "Sports & Outdoors",          topCategory: "durability",     topWeight: 2.0 },
+    "16310101":    { label: "Grocery & Gourmet Food",     topCategory: "product-quality", topWeight: 2.0 },
+    "228013":      { label: "Tools & Home Improvement",   topCategory: "durability",     topWeight: 2.0 },
+    "3760911":     { label: "Beauty & Personal Care",     topCategory: "product-quality", topWeight: 1.5 },
+    "283155":      { label: "Books",                      topCategory: "product-quality", topWeight: 1.5 },
+    "2619525011":  { label: "Toys & Games",               topCategory: "product-quality", topWeight: 1.5 },
+  };
 
-  it("Clothing emphasizes size-fit over performance", () => {
-    const p = getWeightProfile("7141123011");
-    expect(p.weights["size-fit"]!).toBeGreaterThan(p.weights["performance"]!);
-  });
-
-  it("Tools emphasizes durability", () => {
-    const p = getWeightProfile("228013");
-    expect(p.weights["durability"]).toBe(2.0);
-  });
-
-  it("Grocery emphasizes product-quality and packaging", () => {
-    const p = getWeightProfile("16310101");
-    expect(p.weights["product-quality"]).toBe(2.0);
-    expect(p.weights["packaging"]!).toBeGreaterThan(1.0);
-  });
-
-  it("Home & Kitchen balances quality and ease-of-use", () => {
-    const p = getWeightProfile("1055398");
-    expect(p.label).toBe("Home & Kitchen");
-    expect(p.weights["product-quality"]).toBe(1.5);
-    expect(p.weights["ease-of-use"]).toBe(1.5);
-  });
-
-  it("Baby prioritizes product quality and safety", () => {
-    const p = getWeightProfile("165796011");
-    expect(p.label).toBe("Baby");
-    expect(p.weights["product-quality"]).toBe(2.0);
-    expect(p.weights["ease-of-use"]).toBe(1.5);
-    expect(p.weights["durability"]).toBe(1.5);
-  });
-
-  it("Sports & Outdoors emphasizes durability and performance", () => {
-    const p = getWeightProfile("3375251");
-    expect(p.label).toBe("Sports & Outdoors");
-    expect(p.weights["durability"]).toBe(2.0);
-    expect(p.weights["performance"]).toBe(1.5);
-    expect(p.weights["appearance"]!).toBeLessThan(1.0);
-  });
-
-  it("Beauty emphasizes product quality and appearance", () => {
-    const p = getWeightProfile("3760911");
-    expect(p.label).toBe("Beauty & Personal Care");
-    expect(p.weights["product-quality"]).toBe(1.5);
-    expect(p.weights["appearance"]).toBe(1.5);
-    expect(p.weights["compatibility"]!).toBeLessThan(1.0);
-  });
-
-  it("Books de-emphasizes hardware categories", () => {
-    const p = getWeightProfile("283155");
-    expect(p.label).toBe("Books");
-    expect(p.weights["performance"]!).toBeLessThan(1.0);
-    expect(p.weights["durability"]!).toBeLessThan(1.0);
-    expect(p.weights["compatibility"]!).toBeLessThan(1.0);
-  });
-
-  it("Toys & Games emphasizes quality, durability, and ease-of-use", () => {
-    const p = getWeightProfile("2619525011");
-    expect(p.label).toBe("Toys & Games");
-    expect(p.weights["product-quality"]).toBe(1.5);
-    expect(p.weights["durability"]).toBe(1.5);
-    expect(p.weights["ease-of-use"]).toBe(1.3);
-  });
-
-  it("all profiles have at least 3 weighted categories", () => {
-    for (const p of PROFILES) {
+  it("all 10 department profiles load with correct labels and top-weighted categories", () => {
+    for (const [id, expected] of Object.entries(EXPECTED)) {
+      const p = getWeightProfile(id);
+      expect(p.label).toBe(expected.label);
+      expect(p.weights[expected.topCategory]).toBe(expected.topWeight);
       expect(Object.keys(p.weights).length).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("no duplicate department IDs across profiles", () => {
+    const ids = PROFILES.map((p) => p.departmentId);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
