@@ -219,7 +219,7 @@ async function main(): Promise<void> {
 
   // Initialize cross-search comparison tray
   onCompareChange(renderCompareTray);
-  loadCompareItems().then(renderCompareTray).catch(() => { /* ignore */ });
+  loadCompareItems().then(renderCompareTray).catch((err) => { console.warn("[BAS] Compare tray load failed:", err); });
 
   // Check for product recalls (non-blocking background task)
   void queueRecallCheck();
@@ -935,7 +935,7 @@ function queueReviewAnalysis(products: Product[]): void {
             score = currentFilters.useMLAnalysis
               ? await computeReviewScoreWithML(reviewData)
               : computeReviewScore(reviewData);
-            await setCachedScore(asin, score).catch(() => {});
+            await setCachedScore(asin, score).catch((e) => { console.warn("[BAS] Cache write failed:", e); });
           }
         }
 
@@ -1048,11 +1048,11 @@ function queueDetailEnrichment(products: Product[]): void {
 
           if (!brand && details.brand) {
             brand = details.brand;
-            await setCachedBrand(asin, brand).catch(() => {});
+            await setCachedBrand(asin, brand).catch((e) => { console.warn("[BAS] Brand cache write failed:", e); });
 
             // Record learning
             const candidate = extractBrandCandidate(product.element, product.title);
-            await recordBrandLearning(candidate, brand).catch(() => {});
+            await recordBrandLearning(candidate, brand).catch((e) => { console.warn("[BAS] Brand learning failed:", e); });
           }
 
           seller = details.seller;

@@ -88,7 +88,7 @@ export function computeDealScore(
         points: couponPoints,
       });
       totalPoints += couponPoints;
-    } else if (coupon.type === "amount" && price != null && price > 0) {
+    } else if (coupon.type === "amount" && price != null && price > 0 && coupon.value > 0) {
       couponPercent = (coupon.value / (price + coupon.value)) * 100;
       const couponPoints = Math.min(20, Math.round(couponPercent * 0.5));
       signals.push({

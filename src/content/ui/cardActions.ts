@@ -231,11 +231,13 @@ export function injectCardActions(
         document.addEventListener("click", (ev) => {
           if (!dropdown.contains(ev.target as Node)) cleanup();
         }, { signal: abortCtrl.signal });
-        // Also clean up if dropdown is removed from DOM by other means
+        // Clean up if dropdown/card is removed from DOM (e.g., during re-filtering)
         const obs = new MutationObserver(() => {
           if (!dropdown.isConnected) { abortCtrl.abort(); obs.disconnect(); }
         });
-        obs.observe(saveBtn, { childList: true });
+        // Observe nearest stable ancestor — the card or document body
+        const observeTarget = card.parentElement ?? document.body;
+        obs.observe(observeTarget, { childList: true, subtree: true });
       }, 0);
     });
     container.appendChild(saveBtn);
