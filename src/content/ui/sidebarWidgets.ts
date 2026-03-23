@@ -333,6 +333,15 @@ export function createDistributedFilters(
     refs.priceMax.style.width = "60px";
     priceGroup.append(refs.priceMin, dash, refs.priceMax);
     container.appendChild(priceGroup);
+
+    // "After coupons" toggle
+    const effectiveRow = wGroup("", "When checked, price filter uses effective price after coupons & S&S discounts");
+    refs.effectivePriceCb = wCheckbox(initialState.useEffectivePrice, emitChange);
+    const epLabel = document.createElement("span");
+    epLabel.textContent = "Filter by price after coupons";
+    epLabel.style.fontSize = "12px";
+    effectiveRow.append(refs.effectivePriceCb, epLabel);
+    container.appendChild(effectiveRow);
   });
 
   injectAfterSection(priceSection, priceWidget, sidebar);
@@ -619,6 +628,7 @@ interface WidgetRefs {
   // Price widget
   priceMin: HTMLInputElement;
   priceMax: HTMLInputElement;
+  effectivePriceCb: HTMLInputElement;
   // Brand (integrated into Amazon's section)
   brandSelect: HTMLSelectElement;
   sellerSelect: HTMLSelectElement;
@@ -661,6 +671,7 @@ function gatherState(refs: WidgetRefs, state: FilterState): void {
     ? parseCountryList(refs.originExcludeInput.value)
     : state.originExclude;
   state.hideUnknownOrigin = refs.hideUnknownOriginCb?.checked ?? state.hideUnknownOrigin;
+  state.useEffectivePrice = refs.effectivePriceCb?.checked ?? state.useEffectivePrice;
 
   // Collect excluded brands from the integrated UI or fallback textarea
   const excluded: string[] = [];

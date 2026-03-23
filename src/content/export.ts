@@ -30,6 +30,8 @@ export interface ExportRow {
   brand: string;
   price: number | null;
   listPrice: number | null;
+  effectivePrice: number | null;
+  subscribeAndSave: number | null;
   rating: number;
   reviewCount: number;
   isSponsored: boolean;
@@ -66,6 +68,8 @@ export function buildExportRows(
         brand: p.brand,
         price: p.price,
         listPrice: p.listPrice ?? null,
+        effectivePrice: p.effectivePrice ?? null,
+        subscribeAndSave: p.subscribeAndSave ?? null,
         rating: p.rating,
         reviewCount: p.reviewCount,
         isSponsored: p.isSponsored,
@@ -86,7 +90,8 @@ export function buildExportRows(
 // ── CSV ──────────────────────────────────────────────────────────────
 
 const CSV_HEADERS: (keyof ExportRow)[] = [
-  "asin", "title", "brand", "price", "listPrice", "rating", "reviewCount",
+  "asin", "title", "brand", "price", "listPrice", "effectivePrice", "subscribeAndSave",
+  "rating", "reviewCount",
   "isSponsored", "seller", "fulfillment", "countryOfOrigin",
   "reviewQuality", "trustScore", "sellerTrust", "listingIntegrity",
   "dealScore", "reviewSummary", "url",
@@ -98,6 +103,8 @@ const CSV_LABELS: Record<string, string> = {
   brand: "Brand",
   price: "Price",
   listPrice: "List Price",
+  effectivePrice: "Effective Price",
+  subscribeAndSave: "S&S Discount %",
   rating: "Rating",
   reviewCount: "Reviews",
   isSponsored: "Sponsored",

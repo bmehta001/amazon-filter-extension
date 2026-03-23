@@ -41,12 +41,15 @@ export async function applyFilters(
     }
   }
 
-  // P4: Price range
+  // P4: Price range (use effective price when coupon-aware filtering is on)
   if (product.price !== null) {
-    if (state.priceMin !== null && product.price < state.priceMin) {
+    const filterPrice = state.useEffectivePrice
+      ? (product.effectivePrice ?? product.price)
+      : product.price;
+    if (state.priceMin !== null && filterPrice < state.priceMin) {
       return "hide";
     }
-    if (state.priceMax !== null && product.price > state.priceMax) {
+    if (state.priceMax !== null && filterPrice > state.priceMax) {
       return "hide";
     }
   }

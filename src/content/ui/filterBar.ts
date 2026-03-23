@@ -111,6 +111,20 @@ export function createFilterBar(
   priceMin.addEventListener("change", emitChange);
   priceMax.addEventListener("change", emitChange);
   priceGroup.append(priceMin, priceDash, priceMax);
+
+  // "Use effective price" checkbox (after coupons/S&S)
+  const effectivePriceLabel = document.createElement("label");
+  effectivePriceLabel.style.cssText = "display:flex;align-items:center;gap:3px;font-size:11px;margin-left:6px;cursor:pointer;";
+  effectivePriceLabel.title = "When checked, price filter uses the effective price after coupons and Subscribe & Save discounts";
+  const effectivePriceCb = document.createElement("input");
+  effectivePriceCb.type = "checkbox";
+  effectivePriceCb.checked = initialState.useEffectivePrice;
+  effectivePriceCb.addEventListener("change", emitChange);
+  const effectivePriceText = document.createElement("span");
+  effectivePriceText.textContent = "After coupons";
+  effectivePriceLabel.append(effectivePriceCb, effectivePriceText);
+  priceGroup.append(effectivePriceLabel);
+
   bar.appendChild(priceGroup);
 
   bar.appendChild(sep());
@@ -487,6 +501,7 @@ export function createFilterBar(
       originInclude: [],
       originExclude: [],
       hideUnknownOrigin: false,
+      useEffectivePrice: effectivePriceCb.checked,
     };
     callbacks.onFilterChange(state);
   }

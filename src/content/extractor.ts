@@ -41,6 +41,7 @@ export function extractProduct(card: HTMLElement): Product {
   const listPrice = extractListPrice(card);
   const coupon = extractCoupon(card);
   const hasDealBadge = extractDealBadge(card);
+  const subscribeAndSave = extractSubscribeAndSave(card);
 
   return {
     element: card,
@@ -55,6 +56,7 @@ export function extractProduct(card: HTMLElement): Product {
     listPrice: listPrice ?? undefined,
     coupon: coupon ?? undefined,
     hasDealBadge,
+    subscribeAndSave: subscribeAndSave ?? undefined,
   };
 }
 
@@ -447,4 +449,33 @@ export function extractDealBadge(card: HTMLElement): boolean {
   }
 
   return false;
+}
+
+/**
+ * Extract Subscribe & Save discount percentage from a product card.
+ * Amazon shows this as "Save X% with Subscribe & Save" or similar text.
+ */
+export function extractSubscribeAndSave(card: HTMLElement): number | null {
+  // Strategy 1: Dedicated S&S component
+  const snsEl = card.querySelector(
+    '[data-component-type="s-subscribe-and-save"], ' +
+    '[class*="subscribe"], [id*="subscribe"]',
+  );
+  if (snsEl) {
+    const text = snsEl.textContent || "";
+    const match = text.match(/(\d+)\s*%/);
+    if (match) return parseInt(match[1], 10);
+  }
+
+  // Strategy 2: Text-based search across the card for S&S patterns
+  const cardText = card.textContent || "";
+  if (/subscribe\s*(?:&|and)\s*save/i.test(cardText)) {
+    const match =
+      cardText.match(/save\s+(?:an?\s+)?(?:extra\s+)?(\d+)\s*%\s*(?:with\s+)?(?:subscribe|S&S)/i) ||
+      cardText.match(/(\d+)\s*%\s*(?:with\s+)?(?:subscribe\s*(?:&|and)\s*save|S&S)/i) ||
+      cardText.match(/(?:subscribe\s*(?:&|and)\s*save|S&S)[^%]*?(\d+)\s*%/i);
+    if (match) return parseInt(match[1], 10);
+  }
+
+  return null;
 }

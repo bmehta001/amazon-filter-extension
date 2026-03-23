@@ -24,6 +24,10 @@ export interface Product {
   hasDealBadge?: boolean;
   /** Country of Origin, populated asynchronously from product detail page. */
   countryOfOrigin?: string;
+  /** Subscribe & Save discount percentage, if available. */
+  subscribeAndSave?: number;
+  /** Price after applying all stacked discounts (coupon, S&S, list price discount). */
+  effectivePrice?: number;
 }
 
 /** Coupon information extracted from a search card. */
@@ -111,6 +115,8 @@ export interface FilterState {
   originExclude: string[];
   /** Hide products with unknown/missing country of origin. */
   hideUnknownOrigin: boolean;
+  /** When true, price filter uses effective (after-coupon/S&S) price. */
+  useEffectivePrice: boolean;
 }
 
 /** Sort criteria for client-side product sorting. */
@@ -204,6 +210,7 @@ export const DEFAULT_FILTERS: FilterState = {
   originInclude: [],
   originExclude: [],
   hideUnknownOrigin: false,
+  useEffectivePrice: true,
 };
 
 /** Default storage data. */

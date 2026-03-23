@@ -54,8 +54,10 @@ export function computeDealScore(
 ): DealScore | null {
   const { price, listPrice, coupon, hasDealBadge, reviewCount, reviewQuality } = product;
 
+  const { subscribeAndSave } = product;
+
   // Skip products with no deal signals at all
-  if (!listPrice && !coupon && !hasDealBadge) return null;
+  if (!listPrice && !coupon && !hasDealBadge && !subscribeAndSave) return null;
 
   const signals: DealSignal[] = [];
   const manipulationWarnings: string[] = [];
@@ -96,6 +98,19 @@ export function computeDealScore(
       });
       totalPoints += couponPoints;
     }
+  }
+
+  // ── Factor 2b: Subscribe & Save discount (0-15 points) ──
+  let snsPercent = 0;
+  if (subscribeAndSave != null && subscribeAndSave > 0) {
+    snsPercent = subscribeAndSave;
+    const snsPoints = Math.min(15, Math.round(subscribeAndSave * 0.4));
+    signals.push({
+      type: "coupon",
+      description: `${subscribeAndSave}% Subscribe & Save discount`,
+      points: snsPoints,
+    });
+    totalPoints += snsPoints;
   }
 
   // ── Factor 3: "Limited time deal" badge (+15 points) ──
@@ -250,10 +265,11 @@ export function computeDealScore(
   // Clamp to 0-100
   totalPoints = Math.max(0, Math.min(100, totalPoints));
 
-  // Compute effective discount (price reduction + coupon combined multiplicatively)
+  // Compute effective discount (price reduction + coupon + S&S combined multiplicatively)
+  const combinedCouponAndSns = couponPercent + snsPercent * (1 - couponPercent / 100);
   const effectiveDiscount = discountPercent >= 99
     ? 99
-    : Math.min(99, Math.round(discountPercent + couponPercent * (1 - discountPercent / 100)));
+    : Math.min(99, Math.round(discountPercent + combinedCouponAndSns * (1 - discountPercent / 100)));
 
   // Determine label and color
   const { label, emoji, color } = scoreToLabel(totalPoints, signals);

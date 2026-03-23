@@ -44,6 +44,8 @@ import { getCachedScore, setCachedScore } from "../review/cache";
 import { getProductInsights } from "../review/categories";
 import { generateReviewSummary, generateSummaryFromTopicScores } from "../review/summary";
 import type { ReviewSummary } from "../review/summary";
+import { detectDepartment, getWeightProfile, applyWeights, computeWeightedAggregate } from "../review/categoryWeights";
+import type { CategoryWeightProfile } from "../review/categoryWeights";
 import { buildExportRows, exportToCsv, exportToJson, exportToClipboard, downloadFile, getExportFilename } from "./export";
 import type { EnrichmentMaps } from "./export";
 import { loadCompareItems, onCompareChange, resetCompareCache } from "../compare/storage";
@@ -51,6 +53,7 @@ import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
+import { computeSavingsStack, injectSavingsBadge, SAVINGS_BADGE_STYLES } from "./ui/savingsBadge";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
@@ -79,6 +82,7 @@ ${CONFIDENCE_BADGE_STYLES}
 ${DUPLICATE_BADGE_STYLES}
 ${TOUR_STYLES}
 ${ADVANCED_SEARCH_STYLES}
+${SAVINGS_BADGE_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -153,6 +157,8 @@ const reviewSummaryMap = new Map<string, ReviewSummary>();
 let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
+/** Detected department weight profile for category-specific scoring. */
+let currentWeightProfile: CategoryWeightProfile | null = null;
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -183,6 +189,13 @@ async function main(): Promise<void> {
   }
   if (currentPrefs.useMLAnalysis !== currentFilters.useMLAnalysis) {
     currentFilters.useMLAnalysis = currentPrefs.useMLAnalysis;
+  }
+
+  // Detect department for category-specific scoring weights
+  const dept = detectDepartment();
+  currentWeightProfile = getWeightProfile(dept.departmentId);
+  if (dept.label) {
+    console.log(`[BAS] Department detected: ${dept.label} (weights active)`);
   }
 
   // Listen for preference changes from popup
@@ -354,6 +367,9 @@ function watchForSoftNavigation(): void {
       destroyCompareTray();
       destroyAdvancedSearch();
       clearRecallCache();
+      // Re-detect department (may change on soft nav to a different category)
+      const dept = detectDepartment();
+      currentWeightProfile = getWeightProfile(dept.departmentId);
       void injectFilterBar().then(() => filterAllProducts());
     }
   }, CHECK_INTERVAL_MS);
@@ -447,6 +463,12 @@ async function filterAllProducts(): Promise<void> {
       product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
     }
 
+    // Compute savings stack and set effectivePrice before filtering
+    const savingsStack = computeSavingsStack(product);
+    if (savingsStack) {
+      product.effectivePrice = savingsStack.effectivePrice;
+    }
+
     // Attach adjusted rating if categories are being ignored
     if (product.asin && productInsightsMap.has(product.asin) && currentFilters.ignoredCategories.length > 0) {
       product.adjustedRating = productInsightsMap.get(product.asin)!.adjustedRating;
@@ -538,6 +560,14 @@ async function filterAllProducts(): Promise<void> {
       if (dealScore) {
         injectDealBadge(product.element, dealScore);
         if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
+      }
+    }
+
+    // Inject savings stack badge for products with stacked discounts
+    if (result !== "hide" && product.effectivePrice != null) {
+      const stack = computeSavingsStack(product);
+      if (stack && stack.layers.filter((l) => l.amount > 0).length > 0) {
+        injectSavingsBadge(product.element, stack);
       }
     }
 
@@ -942,8 +972,13 @@ function queueReviewAnalysis(products: Product[]): void {
           injectConfidenceBadgeForProduct(asin, product.element);
 
           // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
-          const summary = (insights.topicScores.length > 0)
-            ? generateSummaryFromTopicScores(insights.topicScores)
+          // Apply category weights if a department profile is active
+          let topicScoresForSummary = insights.topicScores;
+          if (currentWeightProfile && currentWeightProfile.departmentId !== "default") {
+            topicScoresForSummary = applyWeights(insights.topicScores, currentWeightProfile);
+          }
+          const summary = (topicScoresForSummary.length > 0)
+            ? generateSummaryFromTopicScores(topicScoresForSummary)
             : generateReviewSummary(reviewData.reviews);
           if (summary) {
             const panelData: SummaryPanelData = { summary, insights };

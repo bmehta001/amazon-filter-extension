@@ -315,7 +315,8 @@ describe("exportToCsv edge cases", () => {
   it("escapes newlines in field values", () => {
     const row: ExportRow = {
       asin: "B001", title: "Line1\nLine2", brand: "B", price: 10,
-      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      listPrice: null, effectivePrice: null, subscribeAndSave: null,
+      rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
       dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
@@ -328,7 +329,8 @@ describe("exportToCsv edge cases", () => {
   it("escapes combined commas, quotes, and newlines", () => {
     const row: ExportRow = {
       asin: "B001", title: 'He said, "wow"\nAmazing', brand: "B", price: 10,
-      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      listPrice: null, effectivePrice: null, subscribeAndSave: null,
+      rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
       dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
@@ -354,7 +356,8 @@ describe("exportToClipboard edge cases", () => {
   it("does not escape tabs in values (raw TSV)", () => {
     const row: ExportRow = {
       asin: "B001", title: "Tab\there", brand: "B", price: 10,
-      listPrice: null, rating: 4, reviewCount: 50, isSponsored: false,
+      listPrice: null, effectivePrice: null, subscribeAndSave: null,
+      rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
       dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
@@ -362,7 +365,7 @@ describe("exportToClipboard edge cases", () => {
     const tsv = exportToClipboard([row]);
     // Tab in title will create extra columns (expected limitation)
     const cols = tsv.split("\n")[1].split("\t");
-    expect(cols.length).toBeGreaterThan(18); // header has 18 cols, extra from embedded tab
+    expect(cols.length).toBeGreaterThan(20); // header has 20 cols, extra from embedded tab
   });
 });
 
