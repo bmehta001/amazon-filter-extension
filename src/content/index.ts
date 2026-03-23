@@ -584,7 +584,7 @@ async function filterAllProducts(): Promise<void> {
     // Inject savings stack badge for products with stacked discounts
     if (result !== "hide" && product.effectivePrice != null) {
       const stack = computeSavingsStack(product);
-      if (stack && stack.layers.filter((l) => l.amount > 0).length > 0) {
+      if (stack && stack.layers.some(l => l.amount > 0)) {
         injectSavingsBadge(product.element, stack);
       }
     }
@@ -647,9 +647,6 @@ async function filterAllProducts(): Promise<void> {
       updateProcessingState(filterBarHost, "processing", "⏳ Loading product data...");
     }
     queueDetailEnrichment(products);
-    if (filterBarHost) {
-      updateProcessingState(filterBarHost, "done");
-    }
   }
 
   if (filterBarHost) {

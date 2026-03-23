@@ -197,17 +197,11 @@ function extractBrand(card: HTMLElement, title: string): string {
   // Strategy 1: Dedicated brand row — a link or span directly under the title.
   // Amazon typically renders the brand as a link immediately after the <h2>.
   const h2 = card.querySelector("h2");
-  if (h2) {
-    // Walk siblings of the h2's parent to find brand text
-    const h2Container = h2.closest(".a-section, .a-row, div") || h2.parentElement;
-    if (h2Container) {
-      // Look for "by BrandName" links right after the title
-      const byLink = h2Container.querySelector('a[href*="/s?"], a[href*="field-brandtextbin"]');
-      if (byLink?.textContent?.trim()) {
-        const text = byLink.textContent.trim();
-        if (text.length > 0 && text.length < 60) return text;
-      }
-    }
+  const h2Container = h2?.closest(".a-section, .a-row, div") || h2?.parentElement;
+  if (h2Container) {
+    const byLink = h2Container.querySelector('a[href*="/s?"], a[href*="field-brandtextbin"]');
+    const text = byLink?.textContent?.trim();
+    if (text && text.length < 60) return text;
   }
 
   // Strategy 2: "Visit the X Store" pattern (very reliable when present)

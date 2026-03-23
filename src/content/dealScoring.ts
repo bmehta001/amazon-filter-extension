@@ -63,17 +63,21 @@ export function computeDealScore(
   const manipulationWarnings: string[] = [];
   let totalPoints = 0;
 
+  const fmt = (v: number) => `$${v.toFixed(2)}`;
+  const addSignal = (type: DealSignal["type"], description: string, points: number) => {
+    signals.push({ type, description, points });
+    totalPoints += points;
+  };
+  const addManipulation = (description: string, warning: string, penalty: number) => {
+    addSignal("manipulation", description, penalty);
+    manipulationWarnings.push(warning);
+  };
+
   // ── Factor 1: Discount percentage (0-40 points) ──
   let discountPercent = 0;
   if (price != null && listPrice != null && listPrice > price) {
     discountPercent = ((listPrice - price) / listPrice) * 100;
-    const discountPoints = Math.min(40, Math.round(discountPercent * 0.8));
-    signals.push({
-      type: "discount",
-      description: `${Math.round(discountPercent)}% off list price`,
-      points: discountPoints,
-    });
-    totalPoints += discountPoints;
+    addSignal("discount", `${Math.round(discountPercent)}% off list price`, Math.min(40, Math.round(discountPercent * 0.8)));
   }
 
   // ── Factor 2: Coupon value (0-20 points) ──
@@ -81,22 +85,10 @@ export function computeDealScore(
   if (coupon) {
     if (coupon.type === "percent") {
       couponPercent = coupon.value;
-      const couponPoints = Math.min(20, Math.round(coupon.value * 0.5));
-      signals.push({
-        type: "coupon",
-        description: `${coupon.value}% coupon available`,
-        points: couponPoints,
-      });
-      totalPoints += couponPoints;
+      addSignal("coupon", `${coupon.value}% coupon available`, Math.min(20, Math.round(coupon.value * 0.5)));
     } else if (coupon.type === "amount" && price != null && price > 0 && coupon.value > 0) {
       couponPercent = (coupon.value / (price + coupon.value)) * 100;
-      const couponPoints = Math.min(20, Math.round(couponPercent * 0.5));
-      signals.push({
-        type: "coupon",
-        description: `$${coupon.value.toFixed(2)} coupon available`,
-        points: couponPoints,
-      });
-      totalPoints += couponPoints;
+      addSignal("coupon", `${fmt(coupon.value)} coupon available`, Math.min(20, Math.round(couponPercent * 0.5)));
     }
   }
 
@@ -104,34 +96,17 @@ export function computeDealScore(
   let snsPercent = 0;
   if (subscribeAndSave != null && subscribeAndSave > 0) {
     snsPercent = subscribeAndSave;
-    const snsPoints = Math.min(15, Math.round(subscribeAndSave * 0.4));
-    signals.push({
-      type: "coupon",
-      description: `${subscribeAndSave}% Subscribe & Save discount`,
-      points: snsPoints,
-    });
-    totalPoints += snsPoints;
+    addSignal("coupon", `${subscribeAndSave}% Subscribe & Save discount`, Math.min(15, Math.round(subscribeAndSave * 0.4)));
   }
 
   // ── Factor 3: "Limited time deal" badge (+15 points) ──
   if (hasDealBadge) {
-    signals.push({
-      type: "deal-badge",
-      description: "Limited time deal",
-      points: 15,
-    });
-    totalPoints += 15;
+    addSignal("deal-badge", "Limited time deal", 15);
   }
 
   // ── Factor 4: Review trust cross-reference ──
   if (reviewQuality != null && reviewQuality >= 70 && discountPercent >= 15) {
-    const bonusPoints = 10;
-    signals.push({
-      type: "review-trust",
-      description: "Trusted reviews + significant discount",
-      points: bonusPoints,
-    });
-    totalPoints += bonusPoints;
+    addSignal("review-trust", "Trusted reviews + significant discount", 10);
   }
 
   // ── Factor 5: Suspicious discount detection ──
@@ -141,87 +116,48 @@ export function computeDealScore(
   const noDealBadge = !hasDealBadge;
 
   if (hasLargeDiscount && hasLowReviews && noDealBadge) {
-    const penalty = -15;
-    signals.push({
-      type: "suspicious",
-      description: "Large discount on low-review product without deal badge",
-      points: penalty,
-    });
-    totalPoints += penalty;
+    addSignal("suspicious", "Large discount on low-review product without deal badge", -15);
   }
 
   if (hasLargeDiscount && hasLowTrust) {
-    const penalty = -10;
-    signals.push({
-      type: "suspicious",
-      description: "Large discount with suspicious reviews",
-      points: penalty,
-    });
-    totalPoints += penalty;
+    addSignal("suspicious", "Large discount with suspicious reviews", -10);
   }
 
   // ── Factor 6: Inflated "Was" price detection ──
   if (price != null && listPrice != null && listPrice > price) {
     const markup = listPrice / price;
 
-    // "Was" price more than 2.5× current → almost certainly inflated
     if (markup >= 2.5) {
-      const penalty = -20;
-      signals.push({
-        type: "manipulation",
-        description: `"Was" price ($${listPrice.toFixed(2)}) is ${markup.toFixed(1)}× the current price — likely inflated`,
-        points: penalty,
-      });
-      totalPoints += penalty;
-      manipulationWarnings.push(
-        `The "Was $${listPrice.toFixed(2)}" reference price is ${markup.toFixed(1)}× higher than the actual price. This product was likely never sold at that price.`,
+      addManipulation(
+        `"Was" price (${fmt(listPrice)}) is ${markup.toFixed(1)}× the current price — likely inflated`,
+        `The "Was ${fmt(listPrice)}" reference price is ${markup.toFixed(1)}× higher than the actual price. This product was likely never sold at that price.`,
+        -20,
       );
-    }
-    // 2× is borderline — flag but lighter penalty
-    else if (markup >= 2.0 && noDealBadge) {
-      const penalty = -10;
-      signals.push({
-        type: "manipulation",
-        description: `"Was" price ($${listPrice.toFixed(2)}) is ${markup.toFixed(1)}× current price without deal badge`,
-        points: penalty,
-      });
-      totalPoints += penalty;
-      manipulationWarnings.push(
-        `The "Was $${listPrice.toFixed(2)}" price is ${markup.toFixed(1)}× higher than the sale price, and there's no official deal badge — the reference price may be inflated.`,
+    } else if (markup >= 2.0 && noDealBadge) {
+      addManipulation(
+        `"Was" price (${fmt(listPrice)}) is ${markup.toFixed(1)}× current price without deal badge`,
+        `The "Was ${fmt(listPrice)}" price is ${markup.toFixed(1)}× higher than the sale price, and there's no official deal badge — the reference price may be inflated.`,
+        -10,
       );
     }
   }
 
   // ── Factor 7: Coupon-padded pricing ──
-  // Pattern: seller inflates base price, then offers a large coupon to make
-  // the "final" price look like a deal. The after-coupon price is the real price.
   if (coupon && price != null && listPrice == null && couponPercent >= 30) {
-    // Big coupon but no list price → the "current" price IS the inflated price
-    const penalty = -8;
-    signals.push({
-      type: "manipulation",
-      description: `${Math.round(couponPercent)}% coupon on a product with no list price — base price may be inflated to offset the coupon`,
-      points: penalty,
-    });
-    totalPoints += penalty;
-    manipulationWarnings.push(
-      `This product has a ${Math.round(couponPercent)}% coupon but no original list price. The base price ($${price.toFixed(2)}) may be inflated so the after-coupon price appears like a discount.`,
+    addManipulation(
+      `${Math.round(couponPercent)}% coupon on a product with no list price — base price may be inflated to offset the coupon`,
+      `This product has a ${Math.round(couponPercent)}% coupon but no original list price. The base price (${fmt(price)}) may be inflated so the after-coupon price appears like a discount.`,
+      -8,
     );
   }
 
-  // Double-dipping: large list-price discount AND large coupon
   if (discountPercent >= 20 && couponPercent >= 20) {
     const combinedOff = discountPercent + couponPercent;
     if (combinedOff >= 60) {
-      const penalty = -12;
-      signals.push({
-        type: "manipulation",
-        description: `Combined ${Math.round(combinedOff)}% off (${Math.round(discountPercent)}% list + ${Math.round(couponPercent)}% coupon) — unusually high`,
-        points: penalty,
-      });
-      totalPoints += penalty;
-      manipulationWarnings.push(
+      addManipulation(
+        `Combined ${Math.round(combinedOff)}% off (${Math.round(discountPercent)}% list + ${Math.round(couponPercent)}% coupon) — unusually high`,
         `This product claims ${Math.round(discountPercent)}% off the list price AND has a ${Math.round(couponPercent)}% coupon — a combined ${Math.round(combinedOff)}% discount is rarely genuine.`,
+        -12,
       );
     }
   }
@@ -232,31 +168,20 @@ export function computeDealScore(
     const referencePrice = lastKnownPrice ?? priceWhenAdded;
 
     if (referencePrice != null && referencePrice > 0) {
-      // Price went UP since we started tracking, but now claims a "deal"
       if (listPrice != null && price > referencePrice * 1.05) {
-        const penalty = -15;
-        signals.push({
-          type: "manipulation",
-          description: `Price increased from $${referencePrice.toFixed(2)} to $${price.toFixed(2)} since tracking — "deal" may be artificial`,
-          points: penalty,
-        });
-        totalPoints += penalty;
-        manipulationWarnings.push(
-          `We've been tracking this product: it was $${referencePrice.toFixed(2)} before, now the "sale" price is $${price.toFixed(2)} — the price was raised before applying the "discount."`,
+        addManipulation(
+          `Price increased from ${fmt(referencePrice)} to ${fmt(price)} since tracking — "deal" may be artificial`,
+          `We've been tracking this product: it was ${fmt(referencePrice)} before, now the "sale" price is ${fmt(price)} — the price was raised before applying the "discount."`,
+          -15,
         );
       }
 
-      // "Was" price lower than what we actually tracked → definitely inflated
       if (listPrice != null && listPrice > referencePrice * 1.3 && referencePrice > price) {
-        const penalty = -10;
-        signals.push({
-          type: "manipulation",
-          description: `"Was" price ($${listPrice.toFixed(2)}) exceeds our tracked price ($${referencePrice.toFixed(2)}) by ${Math.round(((listPrice - referencePrice) / referencePrice) * 100)}%`,
-          points: penalty,
-        });
-        totalPoints += penalty;
-        manipulationWarnings.push(
-          `The "Was $${listPrice.toFixed(2)}" price is ${Math.round(((listPrice - referencePrice) / referencePrice) * 100)}% higher than the $${referencePrice.toFixed(2)} we previously tracked — the reference price appears fabricated.`,
+        const pctOver = Math.round(((listPrice - referencePrice) / referencePrice) * 100);
+        addManipulation(
+          `"Was" price (${fmt(listPrice)}) exceeds our tracked price (${fmt(referencePrice)}) by ${pctOver}%`,
+          `The "Was ${fmt(listPrice)}" price is ${pctOver}% higher than the ${fmt(referencePrice)} we previously tracked — the reference price appears fabricated.`,
+          -10,
         );
       }
     }

@@ -57,6 +57,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function scoreToLabel(score: number): ReviewScore["label"] {
+  if (score >= 80) return "authentic";
+  if (score >= 50) return "mixed";
+  return "suspicious";
+}
+
 // ---------------------------------------------------------------------------
 // 1. Histogram analysis
 // ---------------------------------------------------------------------------
@@ -301,11 +307,7 @@ export function computeReviewScore(data: ProductReviewData): ReviewScore {
     temporalResult.deduction;
 
   const score = clamp(Math.round(rawScore), 0, 100);
-
-  let label: ReviewScore["label"];
-  if (score >= 80) label = "authentic";
-  else if (score >= 50) label = "mixed";
-  else label = "suspicious";
+  const label = scoreToLabel(score);
 
   const breakdown: ScoreBreakdown = {
     histogramDeduction: histogramResult.deduction,
@@ -354,11 +356,7 @@ export async function computeReviewScoreWithML(
 
   const rawScore = base.score - avgMLDeduction;
   const score = clamp(Math.round(rawScore), 0, 100);
-
-  let label: ReviewScore["label"];
-  if (score >= 80) label = "authentic";
-  else if (score >= 50) label = "mixed";
-  else label = "suspicious";
+  const label = scoreToLabel(score);
 
   const breakdown: ScoreBreakdown = {
     ...base.breakdown,
