@@ -455,152 +455,19 @@ async function filterAllProducts(): Promise<void> {
   }
 
   const products = isHaulMode ? extractAllHaulProducts() : extractAllProducts();
-  let shown = 0;
 
-  // First pass: apply individual filters
-  const filterResults: ("show" | "hide" | "dim")[] = [];
+  // First pass: enrich from caches and apply individual filters
   for (const product of products) {
-    // Attach cached brand if the extractor couldn't determine one
-    if (product.asin && !product.brandCertain && brandMap.has(product.asin)) {
-      product.brand = brandMap.get(product.asin)!;
-      product.brandCertain = true;
-    }
-
-    // Attach cached seller info if available
-    if (product.asin && !product.seller && sellerMap.has(product.asin)) {
-      product.seller = sellerMap.get(product.asin)!;
-    }
-
-    // Attach cached country of origin if available
-    if (product.asin && !product.countryOfOrigin && originMap.has(product.asin)) {
-      product.countryOfOrigin = originMap.get(product.asin)!;
-    }
-
-    // Attach cached review quality if available
-    if (product.asin && reviewScoreMap.has(product.asin)) {
-      product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
-    }
-
-    // Compute savings stack and set effectivePrice before filtering
-    const savingsStack = computeSavingsStack(product);
-    if (savingsStack) {
-      product.effectivePrice = savingsStack.effectivePrice;
-    }
-
-    // Attach adjusted rating if categories are being ignored
-    if (product.asin && productInsightsMap.has(product.asin) && currentFilters.ignoredCategories.length > 0) {
-      product.adjustedRating = productInsightsMap.get(product.asin)!.adjustedRating;
-    }
-
-    const result = await applyFilters(product, currentFilters);
-    filterResults.push(result);
+    attachCachedEnrichment(product);
   }
+  const filterResults = await applyAllFilters(products);
 
-  // Second pass: apply variant deduplication among non-hidden products
-  let dedupSet = new Set<number>();
-  if (currentFilters.dedupCategories.length > 0) {
-    // Build list of products that survived individual filters
-    const visibleProducts: Product[] = [];
-    const visibleIndices: number[] = [];
-    for (let i = 0; i < products.length; i++) {
-      if (filterResults[i] !== "hide") {
-        visibleProducts.push(products[i]);
-        visibleIndices.push(i);
-      }
-    }
-    // Find duplicates among visible products
-    const visibleDups = findDuplicates(visibleProducts, currentFilters.dedupCategories);
-    // Map back to original indices
-    for (const vi of visibleDups) {
-      dedupSet.add(visibleIndices[vi]);
-    }
-  }
+  // Second pass: variant deduplication among non-hidden products
+  const dedupSet = buildDedupSet(products, filterResults);
 
-  // Third pass: apply results to DOM, track page stats for transparency
-  const pageStats: PageStats = {
-    total: products.length,
-    visible: 0,
-    hiddenSponsored: 0,
-    hiddenMinReviews: 0,
-    hiddenMinRating: 0,
-    hiddenPrice: 0,
-    hiddenBrand: 0,
-    hiddenKeyword: 0,
-    hiddenSeller: 0,
-    hiddenDedup: 0,
-  };
-  const dealScoreMap = new Map<string, number>();
-  const visibleProducts: Product[] = [];
-
-  for (let i = 0; i < products.length; i++) {
-    const product = products[i];
-    let result = filterResults[i];
-
-    // Override to hide if it's a duplicate variant
-    if (dedupSet.has(i)) {
-      result = "hide";
-      pageStats.hiddenDedup++;
-    } else if (result === "hide") {
-      // Track why hidden (approximate from filter state)
-      if (currentFilters.hideSponsored && product.isSponsored) pageStats.hiddenSponsored++;
-      else if (currentFilters.minReviews > 0 && product.reviewCount < currentFilters.minReviews) pageStats.hiddenMinReviews++;
-      else if (currentFilters.minRating != null && product.rating < currentFilters.minRating) pageStats.hiddenMinRating++;
-      else if (currentFilters.priceMin != null && product.price != null && product.price < currentFilters.priceMin) pageStats.hiddenPrice++;
-      else if (currentFilters.priceMax != null && product.price != null && product.price > currentFilters.priceMax) pageStats.hiddenPrice++;
-      else if (currentFilters.excludedBrands.some(b => b.toLowerCase() === product.brand.toLowerCase())) pageStats.hiddenBrand++;
-      else if (currentFilters.brandMode === "trusted-only" || currentFilters.brandMode === "hide") pageStats.hiddenBrand++;
-      else if (currentFilters.excludeTokens.some(t => product.title.toLowerCase().includes(t.toLowerCase()))) pageStats.hiddenKeyword++;
-      else if (currentFilters.sellerFilter !== "any") pageStats.hiddenSeller++;
-    }
-
-    applyFilterResult(product.element, result);
-
-    if (result !== "hide") {
-      shown++;
-      visibleProducts.push(product);
-    }
-
-    if (isAllowlisted(product.brand)) {
-      markTrusted(product.element);
-    }
-
-    // Inject per-card actions
-    injectCardActions(product, () => refilterAll(currentFilters));
-
-    // Inject price history sparkline for visible products with ASINs
-    if (currentPrefs.showSparklines && result !== "hide" && product.asin) {
-      injectPriceSparkline(product.element, product.asin);
-    }
-
-    // Inject deal quality badge for products with deal signals
-    if (currentPrefs.showDealBadges && result !== "hide") {
-      const dealScore = computeDealScore(product);
-      if (dealScore) {
-        injectDealBadge(product.element, dealScore);
-        if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
-      }
-    }
-
-    // Inject savings stack badge for products with stacked discounts
-    if (result !== "hide" && product.effectivePrice != null) {
-      const stack = computeSavingsStack(product);
-      if (stack && stack.layers.some(l => l.amount > 0)) {
-        injectSavingsBadge(product.element, stack);
-      }
-    }
-
-    // Inject transparency tooltip
-    const reasons = buildFilterReasons(product, currentFilters);
-    const filterResultObj = { action: result, reasons };
-    // Remove old tooltip if present
-    product.element.querySelector(".bas-transparency-wrapper")?.remove();
-    const tooltipEl = createTransparencyTooltip(product, filterResultObj, pageStats);
-    // Reuse cached h2 element for tooltip insertion (avoids redundant DOM query)
-    const titleArea = product.element.querySelector("h2");
-    if (titleArea) {
-      titleArea.parentElement?.appendChild(tooltipEl);
-    }
-  }
+  // Third pass: render results to DOM
+  const { shown, visibleProducts, dealScoreMap, pageStats } =
+    renderFilterResults(products, filterResults, dedupSet);
 
   pageStats.visible = shown;
 
@@ -626,7 +493,7 @@ async function filterAllProducts(): Promise<void> {
     }
   }
 
-  // Update stats
+  // Update stats display
   if (filterBarHost) {
     if (isDistributedMode) {
       updateDistributedStats(filterBarHost, shown, products.length);
@@ -636,12 +503,10 @@ async function filterAllProducts(): Promise<void> {
     }
   }
 
-  // Queue review analysis for products with ASINs (non-blocking)
+  // Queue non-blocking background enrichments
   if (currentPrefs.showReviewBadges) {
     queueReviewAnalysis(products);
   }
-
-  // Queue brand + seller enrichment for products with ASINs (non-blocking)
   if (currentPrefs.preloadDetails) {
     if (filterBarHost) {
       updateProcessingState(filterBarHost, "processing", "⏳ Loading product data...");
@@ -652,6 +517,169 @@ async function filterAllProducts(): Promise<void> {
   if (filterBarHost) {
     updateProcessingState(filterBarHost, "done");
   }
+}
+
+/**
+ * Attach previously fetched enrichment data from module-level caches.
+ */
+function attachCachedEnrichment(product: Product): void {
+  if (!product.asin) return;
+
+  if (!product.brandCertain && brandMap.has(product.asin)) {
+    product.brand = brandMap.get(product.asin)!;
+    product.brandCertain = true;
+  }
+  if (!product.seller && sellerMap.has(product.asin)) {
+    product.seller = sellerMap.get(product.asin)!;
+  }
+  if (!product.countryOfOrigin && originMap.has(product.asin)) {
+    product.countryOfOrigin = originMap.get(product.asin)!;
+  }
+  if (reviewScoreMap.has(product.asin)) {
+    product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
+  }
+
+  // Compute savings stack and set effectivePrice before filtering
+  const savingsStack = computeSavingsStack(product);
+  if (savingsStack) {
+    product.effectivePrice = savingsStack.effectivePrice;
+  }
+
+  // Attach adjusted rating if categories are being ignored
+  if (productInsightsMap.has(product.asin) && currentFilters.ignoredCategories.length > 0) {
+    product.adjustedRating = productInsightsMap.get(product.asin)!.adjustedRating;
+  }
+}
+
+/**
+ * Run filters on every product and return the per-product results.
+ */
+async function applyAllFilters(products: Product[]): Promise<("show" | "hide" | "dim")[]> {
+  const results: ("show" | "hide" | "dim")[] = [];
+  for (const product of products) {
+    results.push(await applyFilters(product, currentFilters));
+  }
+  return results;
+}
+
+/**
+ * Build the set of product indices that should be hidden due to deduplication.
+ */
+function buildDedupSet(
+  products: Product[],
+  filterResults: ("show" | "hide" | "dim")[],
+): Set<number> {
+  if (currentFilters.dedupCategories.length === 0) return new Set();
+
+  const visibleProducts: Product[] = [];
+  const visibleIndices: number[] = [];
+  for (let i = 0; i < products.length; i++) {
+    if (filterResults[i] !== "hide") {
+      visibleProducts.push(products[i]);
+      visibleIndices.push(i);
+    }
+  }
+  const visibleDups = findDuplicates(visibleProducts, currentFilters.dedupCategories);
+  const dedupSet = new Set<number>();
+  for (const vi of visibleDups) {
+    dedupSet.add(visibleIndices[vi]);
+  }
+  return dedupSet;
+}
+
+/**
+ * Approximate which filter rule caused a product to be hidden (for stats).
+ */
+function categorizeHiddenReason(product: Product, stats: PageStats): void {
+  if (currentFilters.hideSponsored && product.isSponsored) stats.hiddenSponsored++;
+  else if (currentFilters.minReviews > 0 && product.reviewCount < currentFilters.minReviews) stats.hiddenMinReviews++;
+  else if (currentFilters.minRating != null && product.rating < currentFilters.minRating) stats.hiddenMinRating++;
+  else if (currentFilters.priceMin != null && product.price != null && product.price < currentFilters.priceMin) stats.hiddenPrice++;
+  else if (currentFilters.priceMax != null && product.price != null && product.price > currentFilters.priceMax) stats.hiddenPrice++;
+  else if (currentFilters.excludedBrands.some(b => b.toLowerCase() === product.brand.toLowerCase())) stats.hiddenBrand++;
+  else if (currentFilters.brandMode === "trusted-only" || currentFilters.brandMode === "hide") stats.hiddenBrand++;
+  else if (currentFilters.excludeTokens.some(t => product.title.toLowerCase().includes(t.toLowerCase()))) stats.hiddenKeyword++;
+  else if (currentFilters.sellerFilter !== "any") stats.hiddenSeller++;
+}
+
+/**
+ * Apply filter/dedup results to the DOM: show/hide/dim cards, inject badges.
+ */
+function renderFilterResults(
+  products: Product[],
+  filterResults: ("show" | "hide" | "dim")[],
+  dedupSet: Set<number>,
+): { shown: number; visibleProducts: Product[]; dealScoreMap: Map<string, number>; pageStats: PageStats } {
+  const pageStats: PageStats = {
+    total: products.length,
+    visible: 0,
+    hiddenSponsored: 0,
+    hiddenMinReviews: 0,
+    hiddenMinRating: 0,
+    hiddenPrice: 0,
+    hiddenBrand: 0,
+    hiddenKeyword: 0,
+    hiddenSeller: 0,
+    hiddenDedup: 0,
+  };
+  const dealScoreMap = new Map<string, number>();
+  const visibleProducts: Product[] = [];
+  let shown = 0;
+
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i];
+    let result = filterResults[i];
+
+    if (dedupSet.has(i)) {
+      result = "hide";
+      pageStats.hiddenDedup++;
+    } else if (result === "hide") {
+      categorizeHiddenReason(product, pageStats);
+    }
+
+    applyFilterResult(product.element, result);
+
+    if (result !== "hide") {
+      shown++;
+      visibleProducts.push(product);
+    }
+
+    if (isAllowlisted(product.brand)) {
+      markTrusted(product.element);
+    }
+
+    injectCardActions(product, () => refilterAll(currentFilters));
+
+    if (currentPrefs.showSparklines && result !== "hide" && product.asin) {
+      injectPriceSparkline(product.element, product.asin);
+    }
+
+    if (currentPrefs.showDealBadges && result !== "hide") {
+      const dealScore = computeDealScore(product);
+      if (dealScore) {
+        injectDealBadge(product.element, dealScore);
+        if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
+      }
+    }
+
+    if (result !== "hide" && product.effectivePrice != null) {
+      const stack = computeSavingsStack(product);
+      if (stack && stack.layers.some(l => l.amount > 0)) {
+        injectSavingsBadge(product.element, stack);
+      }
+    }
+
+    const reasons = buildFilterReasons(product, currentFilters);
+    const filterResultObj = { action: result, reasons };
+    product.element.querySelector(".bas-transparency-wrapper")?.remove();
+    const tooltipEl = createTransparencyTooltip(product, filterResultObj, pageStats);
+    const titleArea = product.element.querySelector("h2");
+    if (titleArea) {
+      titleArea.parentElement?.appendChild(tooltipEl);
+    }
+  }
+
+  return { shown, visibleProducts, dealScoreMap, pageStats };
 }
 
 /**
