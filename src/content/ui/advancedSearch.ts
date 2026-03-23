@@ -287,6 +287,12 @@ function openAdvancedSearch(): void {
   priceHint.className = "bas-adv-hint";
   priceHint.textContent = "Applied server-side — reduces results before page loads";
   priceSection.appendChild(priceHint);
+  const priceWarning = document.createElement("div");
+  priceWarning.className = "bas-adv-hint";
+  priceWarning.style.color = "#b07c0a";
+  priceWarning.textContent =
+    "⚠ Uses listed price, not coupon-adjusted price. Items in range after coupons may be excluded.";
+  priceSection.appendChild(priceWarning);
   panelElement.appendChild(priceSection);
 
   // ── Checkboxes ──
