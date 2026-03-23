@@ -10,6 +10,14 @@
 /** Amazon's own seller/merchant ID. */
 export const AMAZON_SELLER_ID = "ATVPDKIKX0DER";
 
+/**
+ * Buffer applied to the server-side price max to account for coupons and
+ * Subscribe & Save discounts.  Amazon's p_36 filter uses listed (pre-coupon)
+ * prices, so we widen the upper bound by 30 % and let the client-side filter
+ * (which knows effective prices) apply the precise cutoff.
+ */
+export const COUPON_PRICE_BUFFER = 0.3;
+
 /** Condition filter node IDs (US marketplace). */
 export const CONDITIONS: { label: string; value: string }[] = [
   { label: "New", value: "New" },
@@ -159,10 +167,16 @@ export function buildAdvancedSearchUrl(
     }
 
     // Server-side price range (Amazon uses cents in p_36)
+    // Inflate priceMax by COUPON_PRICE_BUFFER so items whose listed price is
+    // above the user's target but whose effective (after-coupon) price falls
+    // within range are not excluded server-side.  The client-side P4 filter
+    // applies the precise effectivePrice cutoff after page load.
     if (options.priceMin !== null || options.priceMax !== null) {
       const minCents = options.priceMin !== null ? Math.round(options.priceMin * 100) : "";
-      const maxCents = options.priceMax !== null ? Math.round(options.priceMax * 100) : "";
-      url.searchParams.set("p_36", `${minCents}-${maxCents}`);
+      const bufferedMax = options.priceMax !== null
+        ? Math.round(options.priceMax * (1 + COUPON_PRICE_BUFFER) * 100)
+        : "";
+      url.searchParams.set("p_36", `${minCents}-${bufferedMax}`);
     } else {
       url.searchParams.delete("p_36");
     }

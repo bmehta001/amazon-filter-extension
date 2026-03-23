@@ -73,7 +73,7 @@ describe("advancedSearch UI", () => {
     expect(labels).toContain("Condition");
     expect(labels).toContain("Minimum Rating");
     expect(labels).toContain("Sort By");
-    expect(labels).toContain("Price Range (server-side)");
+    expect(labels).toContain("Price Range");
     expect(labels).toContain("Exclude Words (server-side)");
   });
 

@@ -137,7 +137,7 @@ describe("amazonParams", () => {
         priceMax: 50,
       };
       const url = buildAdvancedSearchUrl("headphones", opts, BASE);
-      expect(new URL(url).searchParams.get("p_36")).toBe("1000-5000");
+      expect(new URL(url).searchParams.get("p_36")).toBe("1000-6500");
     });
 
     it("handles open-ended price min", () => {
@@ -157,7 +157,7 @@ describe("amazonParams", () => {
         priceMax: 100,
       };
       const url = buildAdvancedSearchUrl("headphones", opts, BASE);
-      expect(new URL(url).searchParams.get("p_36")).toBe("-10000");
+      expect(new URL(url).searchParams.get("p_36")).toBe("-13000");
     });
 
     it("removes p_36 when no price constraints", () => {
@@ -217,7 +217,7 @@ describe("amazonParams", () => {
       expect(parsed.searchParams.get("k")).toContain("-cheap");
       expect(parsed.searchParams.get("rh")).toContain("n:172282");
       expect(parsed.searchParams.get("p_85")).toBe("2470955011");
-      expect(parsed.searchParams.get("p_36")).toBe("2000-20000");
+      expect(parsed.searchParams.get("p_36")).toBe("2000-26000");
       expect(parsed.searchParams.get("s")).toBe("review-count-rank");
       expect(parsed.searchParams.get("emi")).toBe(AMAZON_SELLER_ID);
     });
@@ -240,7 +240,7 @@ describe("amazonParams", () => {
         priceMax: 49.99,
       };
       const url = buildAdvancedSearchUrl("test", opts, BASE);
-      expect(new URL(url).searchParams.get("p_36")).toBe("999-4999");
+      expect(new URL(url).searchParams.get("p_36")).toBe("999-6499");
     });
   });
 
@@ -344,7 +344,9 @@ describe("amazonParams", () => {
       expect(parsed.condition).toBe("New");
       expect(parsed.primeOnly).toBe(true);
       expect(parsed.priceMin).toBe(25);
-      expect(parsed.priceMax).toBe(150);
+      // priceMax roundtrips as the buffered value (150 * 1.3 = 195)
+      // because build inflates for coupon headroom, parse reads literally
+      expect(parsed.priceMax).toBe(195);
       expect(parsed.sort).toBe("price-asc-rank");
       expect(parsed.amazonOnly).toBe(true);
       expect(parsed.excludeWords).toContain("cheap");
@@ -390,7 +392,7 @@ describe("amazonParams", () => {
         priceMax: 99999.99,
       };
       const url = buildAdvancedSearchUrl("test", opts, BASE);
-      expect(new URL(url).searchParams.get("p_36")).toBe("1000000-9999999");
+      expect(new URL(url).searchParams.get("p_36")).toBe("1000000-12999999");
     });
 
     it("handles whitespace in exclude words", () => {

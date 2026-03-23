@@ -14,6 +14,7 @@ import {
   parseAdvancedOptions,
 } from "../../util/amazonParams";
 import type { AdvancedSearchOptions } from "../../util/amazonParams";
+import { loadFilters, saveFilters, syncFlushPendingFilterSave } from "../../util/storage";
 
 export const ADVANCED_SEARCH_STYLES = `
 .bas-adv-toggle {
@@ -259,7 +260,7 @@ function openAdvancedSearch(): void {
   priceSection.className = "bas-adv-section";
   const priceLabel = document.createElement("label");
   priceLabel.className = "bas-adv-label";
-  priceLabel.textContent = "Price Range (server-side)";
+  priceLabel.textContent = "Price Range";
   priceSection.appendChild(priceLabel);
 
   const priceRow = document.createElement("div");
@@ -285,14 +286,8 @@ function openAdvancedSearch(): void {
   priceSection.appendChild(priceRow);
   const priceHint = document.createElement("div");
   priceHint.className = "bas-adv-hint";
-  priceHint.textContent = "Applied server-side — reduces results before page loads";
+  priceHint.textContent = "Filters by effective price (after coupons and Subscribe & Save)";
   priceSection.appendChild(priceHint);
-  const priceWarning = document.createElement("div");
-  priceWarning.className = "bas-adv-hint";
-  priceWarning.style.color = "#b07c0a";
-  priceWarning.textContent =
-    "⚠ Uses listed price, not coupon-adjusted price. Items in range after coupons may be excluded.";
-  priceSection.appendChild(priceWarning);
   panelElement.appendChild(priceSection);
 
   // ── Checkboxes ──
@@ -359,9 +354,22 @@ function openAdvancedSearch(): void {
   const applyBtn = document.createElement("button");
   applyBtn.className = "bas-adv-btn bas-adv-btn--primary";
   applyBtn.textContent = "🔍 Apply & Search";
-  applyBtn.addEventListener("click", () => {
+  applyBtn.addEventListener("click", async () => {
+    const opts = buildOptions();
     const url = buildUrl();
     closeAdvancedSearch();
+
+    // Sync the real (unbuffered) price range into the client-side FilterState
+    // so the P4 filter applies the precise effectivePrice cutoff after reload.
+    if (opts.priceMin !== null || opts.priceMax !== null) {
+      const filters = await loadFilters();
+      filters.priceMin = opts.priceMin;
+      filters.priceMax = opts.priceMax;
+      filters.useEffectivePrice = true;
+      saveFilters(filters);
+      syncFlushPendingFilterSave();
+    }
+
     window.location.href = url;
   });
   actions.appendChild(applyBtn);
