@@ -159,6 +159,8 @@ let lastVisibleProducts: Product[] = [];
 let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 /** Detected department weight profile for category-specific scoring. */
 let currentWeightProfile: CategoryWeightProfile | null = null;
+/** Guard flag to prevent concurrent re-injection from URL change + DOM observer. */
+let reinjectionInProgress = false;
 
 /**
  * Main entry point — runs when the content script is injected.
@@ -330,6 +332,22 @@ async function injectFilterBar(): Promise<void> {
 let lastUrl = location.href;
 
 /**
+ * Serialized re-injection: prevents the URL-change interval and the
+ * DOM mutation observer from concurrently calling injectFilterBar +
+ * filterAllProducts, which would duplicate enrichment fetches.
+ */
+async function reinjectIfIdle(): Promise<void> {
+  if (reinjectionInProgress) return;
+  reinjectionInProgress = true;
+  try {
+    await injectFilterBar();
+    await filterAllProducts();
+  } finally {
+    reinjectionInProgress = false;
+  }
+}
+
+/**
  * Watch for Amazon's SPA-style navigation where the URL changes without
  * a full page reload (e.g. pagination, filter clicks). When detected,
  * re-inject the filter bar and re-apply filters.
@@ -370,7 +388,7 @@ function watchForSoftNavigation(): void {
       // Re-detect department (may change on soft nav to a different category)
       const dept = detectDepartment();
       currentWeightProfile = getWeightProfile(dept.departmentId);
-      void injectFilterBar().then(() => filterAllProducts());
+      void reinjectIfIdle();
     }
   }, CHECK_INTERVAL_MS);
 
@@ -393,7 +411,7 @@ function watchForSoftNavigation(): void {
 
       if (widgetsGone || sidebarHostGone) {
         console.log("[BAS] Widgets removed from DOM, re-injecting");
-        void injectFilterBar().then(() => filterAllProducts());
+        void reinjectIfIdle();
       }
     }, 300);
   };
