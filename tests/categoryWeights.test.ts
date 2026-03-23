@@ -301,6 +301,53 @@ describe("weight profile sanity checks", () => {
     expect(p.weights["packaging"]!).toBeGreaterThan(1.0);
   });
 
+  it("Home & Kitchen balances quality and ease-of-use", () => {
+    const p = getWeightProfile("1055398");
+    expect(p.label).toBe("Home & Kitchen");
+    expect(p.weights["product-quality"]).toBe(1.5);
+    expect(p.weights["ease-of-use"]).toBe(1.5);
+  });
+
+  it("Baby prioritizes product quality and safety", () => {
+    const p = getWeightProfile("165796011");
+    expect(p.label).toBe("Baby");
+    expect(p.weights["product-quality"]).toBe(2.0);
+    expect(p.weights["ease-of-use"]).toBe(1.5);
+    expect(p.weights["durability"]).toBe(1.5);
+  });
+
+  it("Sports & Outdoors emphasizes durability and performance", () => {
+    const p = getWeightProfile("3375251");
+    expect(p.label).toBe("Sports & Outdoors");
+    expect(p.weights["durability"]).toBe(2.0);
+    expect(p.weights["performance"]).toBe(1.5);
+    expect(p.weights["appearance"]!).toBeLessThan(1.0);
+  });
+
+  it("Beauty emphasizes product quality and appearance", () => {
+    const p = getWeightProfile("3760911");
+    expect(p.label).toBe("Beauty & Personal Care");
+    expect(p.weights["product-quality"]).toBe(1.5);
+    expect(p.weights["appearance"]).toBe(1.5);
+    expect(p.weights["compatibility"]!).toBeLessThan(1.0);
+  });
+
+  it("Books de-emphasizes hardware categories", () => {
+    const p = getWeightProfile("283155");
+    expect(p.label).toBe("Books");
+    expect(p.weights["performance"]!).toBeLessThan(1.0);
+    expect(p.weights["durability"]!).toBeLessThan(1.0);
+    expect(p.weights["compatibility"]!).toBeLessThan(1.0);
+  });
+
+  it("Toys & Games emphasizes quality, durability, and ease-of-use", () => {
+    const p = getWeightProfile("2619525011");
+    expect(p.label).toBe("Toys & Games");
+    expect(p.weights["product-quality"]).toBe(1.5);
+    expect(p.weights["durability"]).toBe(1.5);
+    expect(p.weights["ease-of-use"]).toBe(1.3);
+  });
+
   it("all profiles have at least 3 weighted categories", () => {
     for (const p of PROFILES) {
       expect(Object.keys(p.weights).length).toBeGreaterThanOrEqual(3);

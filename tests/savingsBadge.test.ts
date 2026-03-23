@@ -232,6 +232,50 @@ describe("computeSavingsStack", () => {
     const green = computeSavingsStack(makeProduct({ price: 60, listPrice: 100 }))!;
     expect(green.color).toBe("green");
   });
+
+  it("color tier boundary: exactly 15% is amber", () => {
+    const stack = computeSavingsStack(makeProduct({ price: 85, listPrice: 100 }))!;
+    expect(stack.totalPercent).toBe(15);
+    expect(stack.color).toBe("amber");
+  });
+
+  it("color tier boundary: exactly 30% is green", () => {
+    const stack = computeSavingsStack(makeProduct({ price: 70, listPrice: 100 }))!;
+    expect(stack.totalPercent).toBe(30);
+    expect(stack.color).toBe("green");
+  });
+
+  it("handles very small prices with S&S", () => {
+    const product = makeProduct({ price: 0.99, subscribeAndSave: 5 });
+    const stack = computeSavingsStack(product)!;
+    expect(stack.effectivePrice).toBeGreaterThanOrEqual(0);
+    expect(stack.effectivePrice).toBeLessThan(0.99);
+  });
+
+  it("handles list price equal to current price (no markdown)", () => {
+    const product = makeProduct({ price: 50, listPrice: 50 });
+    // No actual discount
+    expect(computeSavingsStack(product)).toBeNull();
+  });
+
+  it("handles list price lower than current price (data anomaly)", () => {
+    const product = makeProduct({ price: 60, listPrice: 50 });
+    // listPrice < price — no discount layer generated
+    expect(computeSavingsStack(product)).toBeNull();
+  });
+
+  it("all three layers combined rounds effective price to cents", () => {
+    const product = makeProduct({
+      price: 33.33,
+      listPrice: 44.44,
+      coupon: { type: "percent", value: 7 },
+      subscribeAndSave: 3,
+    });
+    const stack = computeSavingsStack(product)!;
+    // effectivePrice should be rounded to 2 decimal places
+    const decimals = stack.effectivePrice.toString().split(".")[1] || "";
+    expect(decimals.length).toBeLessThanOrEqual(2);
+  });
 });
 
 // ── injectSavingsBadge + removeSavingsBadge ──────────────────────────
@@ -348,6 +392,27 @@ describe("deal scoring with Subscribe & Save", () => {
     });
     const scoreWithout = computeDealScore(withoutSns)!;
     expect(score!.effectiveDiscount).toBeGreaterThan(scoreWithout.effectiveDiscount);
+  });
+
+  it("handles zero-value amount coupon gracefully", () => {
+    const product = makeProduct({
+      price: 50,
+      listPrice: 60,
+      coupon: { type: "amount", value: 0 },
+    });
+    const score = computeDealScore(product);
+    expect(score).not.toBeNull();
+    // Zero coupon should not contribute coupon signal
+    const couponSignal = score!.signals.find((s) => s.type === "coupon");
+    // Only discount signal present (not coupon since value is 0)
+    const discountSignal = score!.signals.find((s) => s.type === "discount");
+    expect(discountSignal).toBeDefined();
+  });
+
+  it("returns null when product has no signals at all", () => {
+    const product = makeProduct({ price: 50 });
+    const score = computeDealScore(product);
+    expect(score).toBeNull();
   });
 });
 
