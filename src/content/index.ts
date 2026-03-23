@@ -1,3 +1,4 @@
+import { saveAllEnrichment, restoreAllEnrichment } from "../util/enrichmentCache";
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged, loadPreferences, onPreferencesChanged } from "../util/storage";
 import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildAmazonOnlyUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
@@ -162,6 +163,31 @@ let currentWeightProfile: CategoryWeightProfile | null = null;
 /** Guard flag to prevent concurrent re-injection from URL change + DOM observer. */
 let reinjectionInProgress = false;
 
+/** Gather all enrichment maps into the shape expected by the cache module. */
+function gatherEnrichmentMaps() {
+  return {
+    reviewScoreMap, productInsightsMap, reviewDataMap, brandMap,
+    sellerMap, originMap, trustScoreMap, sellerTrustMap,
+    listingIntegrityMap, dealScoreExportMap, reviewSummaryMap,
+  };
+}
+
+/** Merge cached entries into in-memory maps (only for ASINs not already present). */
+function mergeFromCache(): void {
+  const cached = restoreAllEnrichment();
+  for (const [k, v] of cached.reviewScoreMap) if (!reviewScoreMap.has(k)) reviewScoreMap.set(k, v);
+  for (const [k, v] of cached.productInsightsMap) if (!productInsightsMap.has(k)) productInsightsMap.set(k, v);
+  for (const [k, v] of cached.reviewDataMap) if (!reviewDataMap.has(k)) reviewDataMap.set(k, v);
+  for (const [k, v] of cached.brandMap) if (!brandMap.has(k)) brandMap.set(k, v);
+  for (const [k, v] of cached.sellerMap) if (!sellerMap.has(k)) sellerMap.set(k, v);
+  for (const [k, v] of cached.originMap) if (!originMap.has(k)) originMap.set(k, v);
+  for (const [k, v] of cached.trustScoreMap) if (!trustScoreMap.has(k)) trustScoreMap.set(k, v);
+  for (const [k, v] of cached.sellerTrustMap) if (!sellerTrustMap.has(k)) sellerTrustMap.set(k, v);
+  for (const [k, v] of cached.listingIntegrityMap) if (!listingIntegrityMap.has(k)) listingIntegrityMap.set(k, v);
+  for (const [k, v] of cached.dealScoreExportMap) if (!dealScoreExportMap.has(k)) dealScoreExportMap.set(k, v);
+  for (const [k, v] of cached.reviewSummaryMap) if (!reviewSummaryMap.has(k)) reviewSummaryMap.set(k, v);
+}
+
 /**
  * Main entry point — runs when the content script is injected.
  */
@@ -210,6 +236,9 @@ async function main(): Promise<void> {
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredVisibility(currentFilters.hideSponsored);
 
+  // Restore enrichment data from sessionStorage (survives back-navigation)
+  mergeFromCache();
+
   // Inject the filter bar, retrying if DOM isn't ready yet
   await injectFilterBar();
 
@@ -241,15 +270,17 @@ async function main(): Promise<void> {
     await filterAllProducts();
   });
 
-  // Flush pending saves and clean up resources before page unload.
+  // Flush pending saves and persist enrichment cache before page unload.
   // visibilitychange fires reliably on tab close/navigate; beforeunload is a fallback.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
       syncFlushPendingFilterSave();
+      saveAllEnrichment(gatherEnrichmentMaps());
     }
   });
   window.addEventListener("beforeunload", () => {
     syncFlushPendingFilterSave();
+    saveAllEnrichment(gatherEnrichmentMaps());
     cleanupSoftNavigation();
     stopObserving();
   });
@@ -368,6 +399,8 @@ function watchForSoftNavigation(): void {
       // Always re-inject on soft navigation — Amazon replaces sidebar content
       // when its native filters are clicked, destroying our widgets
       resetOriginalOrder(); // clear stale sort tracking from previous page
+      // Persist enrichment data to sessionStorage before clearing
+      saveAllEnrichment(gatherEnrichmentMaps());
       // Clear enrichment caches from previous page to bound memory usage
       brandMap.clear();
       sellerMap.clear();
