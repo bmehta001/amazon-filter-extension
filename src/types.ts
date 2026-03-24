@@ -28,6 +28,16 @@ export interface Product {
   subscribeAndSave?: number;
   /** Price after applying all stacked discounts (coupon, S&S, list price discount). */
   effectivePrice?: number;
+  /** Multi-buy promotional offer from detail page (e.g., "Buy 2, save 10%"). */
+  multiBuyOffer?: MultiBuyOffer;
+}
+
+/** Multi-buy promotional offer extracted from a product detail page. */
+export interface MultiBuyOffer {
+  /** Human-readable offer text (e.g., "Buy 2, save 10%"). */
+  text: string;
+  /** Minimum quantity required to trigger the offer. */
+  minQuantity: number;
 }
 
 /** Coupon information extracted from a search card. */

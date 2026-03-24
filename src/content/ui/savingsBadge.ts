@@ -12,7 +12,7 @@ import type { Product } from "../../types";
 
 /** A single discount layer in the savings stack. */
 export interface SavingsLayer {
-  type: "list-discount" | "coupon" | "subscribe-save" | "deal-badge";
+  type: "list-discount" | "coupon" | "subscribe-save" | "deal-badge" | "multi-buy";
   label: string;
   /** Percent discount this layer contributes. */
   percent: number;
@@ -108,6 +108,16 @@ export function computeSavingsStack(product: Product): SavingsStack | null {
     layers.push({
       type: "deal-badge",
       label: "Limited deal",
+      percent: 0,
+      amount: 0,
+    });
+  }
+
+  // Layer 5: Multi-buy offer (informational only — from detail page)
+  if (product.multiBuyOffer) {
+    layers.push({
+      type: "multi-buy",
+      label: product.multiBuyOffer.text,
       percent: 0,
       amount: 0,
     });
@@ -210,6 +220,8 @@ export function injectSavingsBadge(card: HTMLElement, stack: SavingsStack): void
       lines.push(`  · ${layer.label} — saves $${layer.amount.toFixed(2)}`);
     } else if (layer.type === "deal-badge") {
       lines.push(`  · ⏰ ${layer.label}`);
+    } else if (layer.type === "multi-buy") {
+      lines.push(`  · 🏷️ ${layer.label}`);
     }
   }
   lines.push(`Effective price: $${stack.effectivePrice.toFixed(2)}`);
@@ -232,4 +244,52 @@ export function injectSavingsBadge(card: HTMLElement, stack: SavingsStack): void
 /** Remove the savings badge from a card. */
 export function removeSavingsBadge(card: HTMLElement): void {
   card.querySelector(`.${BADGE_CLASS}`)?.remove();
+}
+
+const MULTI_BUY_CLASS = "bas-multi-buy-badge";
+
+/** CSS styles for the standalone multi-buy badge. */
+export const MULTI_BUY_BADGE_STYLES = `
+  .${MULTI_BUY_CLASS} {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-top: 4px;
+    background: #eef6ff;
+    color: #0066c0;
+    border: 1px solid #c8dfff;
+  }
+`;
+
+/**
+ * Inject a standalone multi-buy badge when no savings stack exists.
+ * If a savings stack is present, multi-buy is shown in its tooltip instead.
+ */
+export function injectMultiBuyBadge(card: HTMLElement, text: string): void {
+  removeMultiBuyBadge(card);
+
+  const badge = document.createElement("div");
+  badge.className = MULTI_BUY_CLASS;
+  badge.textContent = `🏷️ ${text}`;
+  badge.title = "Multi-buy promotional offer available on this product";
+
+  const priceRow =
+    card.querySelector(".a-price") ??
+    card.querySelector('[data-cy="price-recipe"]') ??
+    card.querySelector("span.a-offscreen")?.parentElement;
+  if (priceRow?.parentElement) {
+    priceRow.parentElement.insertBefore(badge, priceRow.nextSibling);
+  } else {
+    card.appendChild(badge);
+  }
+}
+
+/** Remove the standalone multi-buy badge from a card. */
+export function removeMultiBuyBadge(card: HTMLElement): void {
+  card.querySelector(`.${MULTI_BUY_CLASS}`)?.remove();
 }

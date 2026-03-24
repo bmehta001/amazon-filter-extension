@@ -111,6 +111,7 @@ describe("enrichmentCache", () => {
         listingIntegrityMap: new Map([["A1", { score: 95 } as any]]),
         dealScoreExportMap: new Map([["A1", 67]]),
         reviewSummaryMap: new Map([["A1", { pros: [], cons: [], oneLiner: "Great!" }]]),
+        multiBuyMap: new Map([["A1", { text: "Buy 2, save 10%", minQuantity: 2 }]]),
       };
 
       saveAllEnrichment(maps);
@@ -129,6 +130,7 @@ describe("enrichmentCache", () => {
       expect(restored.sellerTrustMap.get("A1")?.score).toBe(75);
       expect(restored.listingIntegrityMap.get("A1")?.score).toBe(95);
       expect(restored.productInsightsMap.get("A1")?.adjustedRating).toBe(4.2);
+      expect(restored.multiBuyMap.get("A1")?.text).toBe("Buy 2, save 10%");
     });
 
     it("returns empty maps when nothing is cached", () => {

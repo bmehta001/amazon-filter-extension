@@ -54,10 +54,10 @@ import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
-import { computeSavingsStack, injectSavingsBadge, SAVINGS_BADGE_STYLES } from "./ui/savingsBadge";
+import { computeSavingsStack, injectSavingsBadge, injectMultiBuyBadge, removeMultiBuyBadge, SAVINGS_BADGE_STYLES, MULTI_BUY_BADGE_STYLES } from "./ui/savingsBadge";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
-import type { FilterState, Product, SellerInfo, GlobalPreferences } from "../types";
+import type { FilterState, Product, SellerInfo, MultiBuyOffer, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
@@ -84,6 +84,7 @@ ${DUPLICATE_BADGE_STYLES}
 ${TOUR_STYLES}
 ${ADVANCED_SEARCH_STYLES}
 ${SAVINGS_BADGE_STYLES}
+${MULTI_BUY_BADGE_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -154,6 +155,8 @@ const listingIntegrityMap = new Map<string, ListingIntegrityResult>();
 const dealScoreExportMap = new Map<string, number>();
 /** Map ASIN → ReviewSummary for export. */
 const reviewSummaryMap = new Map<string, ReviewSummary>();
+/** Map ASIN → MultiBuyOffer from detail page. */
+const multiBuyMap = new Map<string, MultiBuyOffer>();
 /** Last set of visible products (for export). */
 let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
@@ -168,7 +171,7 @@ function gatherEnrichmentMaps() {
   return {
     reviewScoreMap, productInsightsMap, reviewDataMap, brandMap,
     sellerMap, originMap, trustScoreMap, sellerTrustMap,
-    listingIntegrityMap, dealScoreExportMap, reviewSummaryMap,
+    listingIntegrityMap, dealScoreExportMap, reviewSummaryMap, multiBuyMap,
   };
 }
 
@@ -186,6 +189,7 @@ function mergeFromCache(): void {
   for (const [k, v] of cached.listingIntegrityMap) if (!listingIntegrityMap.has(k)) listingIntegrityMap.set(k, v);
   for (const [k, v] of cached.dealScoreExportMap) if (!dealScoreExportMap.has(k)) dealScoreExportMap.set(k, v);
   for (const [k, v] of cached.reviewSummaryMap) if (!reviewSummaryMap.has(k)) reviewSummaryMap.set(k, v);
+  for (const [k, v] of cached.multiBuyMap) if (!multiBuyMap.has(k)) multiBuyMap.set(k, v);
 }
 
 /**
@@ -410,6 +414,7 @@ function watchForSoftNavigation(): void {
       listingIntegrityMap.clear();
       dealScoreExportMap.clear();
       reviewSummaryMap.clear();
+      multiBuyMap.clear();
       reviewScoreMap.clear();
       productInsightsMap.clear();
       reviewDataMap.clear();
@@ -569,6 +574,9 @@ function attachCachedEnrichment(product: Product): void {
   if (!product.countryOfOrigin && originMap.has(product.asin)) {
     product.countryOfOrigin = originMap.get(product.asin)!;
   }
+  if (!product.multiBuyOffer && multiBuyMap.has(product.asin)) {
+    product.multiBuyOffer = multiBuyMap.get(product.asin)!;
+  }
   if (reviewScoreMap.has(product.asin)) {
     product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
   }
@@ -700,7 +708,12 @@ function renderFilterResults(
       const stack = computeSavingsStack(product);
       if (stack && stack.layers.some(l => l.amount > 0)) {
         injectSavingsBadge(product.element, stack);
+      } else if (product.multiBuyOffer) {
+        // No savings stack but has multi-buy — show standalone badge
+        injectMultiBuyBadge(product.element, product.multiBuyOffer.text);
       }
+    } else if (result !== "hide" && product.multiBuyOffer) {
+      injectMultiBuyBadge(product.element, product.multiBuyOffer.text);
     }
 
     const reasons = buildFilterReasons(product, currentFilters);
@@ -1191,6 +1204,11 @@ function queueDetailEnrichment(products: Product[]): void {
             originMap.set(asin, details.countryOfOrigin);
             product.countryOfOrigin = details.countryOfOrigin;
             updateOriginDisplay(product);
+          }
+
+          if (details.multiBuyOffer) {
+            multiBuyMap.set(asin, details.multiBuyOffer);
+            product.multiBuyOffer = details.multiBuyOffer;
           }
         }
 

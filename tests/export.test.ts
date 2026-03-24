@@ -309,7 +309,7 @@ describe("exportToCsv edge cases", () => {
       rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
-      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+      dealScore: null, multiBuyOffer: "", reviewSummary: "", url: "https://amazon.com/dp/B001",
     };
     const csv = exportToCsv([row]);
     // Newline in value must be inside quotes
@@ -323,7 +323,7 @@ describe("exportToCsv edge cases", () => {
       rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
-      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+      dealScore: null, multiBuyOffer: "", reviewSummary: "", url: "https://amazon.com/dp/B001",
     };
     const csv = exportToCsv([row]);
     expect(csv).toContain('"He said, ""wow""\nAmazing"');
@@ -350,12 +350,12 @@ describe("exportToClipboard edge cases", () => {
       rating: 4, reviewCount: 50, isSponsored: false,
       seller: "", fulfillment: "", countryOfOrigin: "", reviewQuality: null,
       trustScore: null, sellerTrust: null, listingIntegrity: null,
-      dealScore: null, reviewSummary: "", url: "https://amazon.com/dp/B001",
+      dealScore: null, multiBuyOffer: "", reviewSummary: "", url: "https://amazon.com/dp/B001",
     };
     const tsv = exportToClipboard([row]);
     // Tab in title will create extra columns (expected limitation)
     const cols = tsv.split("\n")[1].split("\t");
-    expect(cols.length).toBeGreaterThan(20); // header has 20 cols, extra from embedded tab
+    expect(cols.length).toBeGreaterThan(20); // header has 21 cols, extra from embedded tab
   });
 });
 

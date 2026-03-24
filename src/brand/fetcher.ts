@@ -3,7 +3,7 @@
  * product detail page. Used as a fallback for data not available on search cards.
  */
 
-import type { SellerInfo, FulfillmentType } from "../types";
+import type { SellerInfo, FulfillmentType, MultiBuyOffer } from "../types";
 
 const TAG = "[BAS]";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -17,6 +17,8 @@ export interface ProductDetailResult {
   otherSellersCount: number;
   /** Lowest "new" price from other sellers. */
   otherSellersMinPrice: number | null;
+  /** Multi-buy promotional offer (e.g., "Buy 2, save 10%"). */
+  multiBuyOffer: MultiBuyOffer | null;
 }
 
 /**
@@ -36,7 +38,7 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
 
     if (!response.ok) {
       console.warn(TAG, `Detail fetch failed for ${asin}: HTTP ${response.status}`);
-      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null };
+      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null };
     }
 
     const html = await response.text();
@@ -55,10 +57,11 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
       countryOfOrigin: extractCountryOfOrigin(doc),
       otherSellersCount: otherSellers.count,
       otherSellersMinPrice: otherSellers.minPrice,
+      multiBuyOffer: extractMultiBuyOffer(doc),
     };
   } catch (err) {
     console.warn(TAG, `Error fetching details for ${asin}:`, err);
-    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null };
+    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null };
   }
 }
 
@@ -270,6 +273,77 @@ function normalizeCountry(raw: string): string {
 }
 
 /**
+ * Extract multi-buy promotional offers from a product detail page.
+ * Amazon surfaces these in various locations: promo sections, buy box, or detail bullets.
+ */
+export function extractMultiBuyOffer(doc: Document): MultiBuyOffer | null {
+  // Regex patterns for quantity-based promotions.
+  // Each entry: [pattern, groupIndex] where groupIndex is the capture group for quantity.
+  const MULTI_BUY_PATTERNS: [RegExp, number][] = [
+    [/buy\s+(\d+)[,\s]+(?:get|save)\s+\d+%?\s*off/i, 1],
+    [/buy\s+(\d+)[,\s]+save\s+\$?[\d.]+/i, 1],
+    [/(\d+)\s+for\s+\$[\d.]+/i, 1],
+    [/save\s+\d+%?\s+when\s+you\s+buy\s+(\d+)/i, 1],
+    [/purchase\s+(\d+)\s+or\s+more/i, 1],
+    [/quantity\s+discount[:\s]+buy\s+(\d+)/i, 1],
+    [/(\d+)\+\s+items?\s+(?:get|save)\s+\d+%/i, 1],
+  ];
+
+  /** Try to extract a MultiBuyOffer from a text block. */
+  function tryParse(text: string): MultiBuyOffer | null {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    for (const [pattern, qtyGroup] of MULTI_BUY_PATTERNS) {
+      const match = normalized.match(pattern);
+      if (match) {
+        const qty = parseInt(match[qtyGroup], 10);
+        if (qty >= 2 && qty <= 100) {
+          // Extract the full phrase around the match for display
+          const idx = normalized.toLowerCase().indexOf(match[0].toLowerCase());
+          const start = Math.max(0, normalized.lastIndexOf(".", idx) + 1);
+          const end = normalized.indexOf(".", idx + match[0].length);
+          const sentence = normalized.slice(start, end > 0 ? end : undefined).trim();
+          return { text: sentence.slice(0, 80), minQuantity: qty };
+        }
+      }
+    }
+    return null;
+  }
+
+  // Strategy 1: Promotion/deal sections
+  const promoSelectors = [
+    "#promoPriceBlockMessage_feature_div",
+    "#sopp_feature_div",
+    "#tp_feature_div",
+    "#promoMessageId",
+    '[data-feature-name="promotions"]',
+    "#SNS_PromoMessage",
+  ];
+  for (const sel of promoSelectors) {
+    const el = doc.querySelector(sel);
+    if (el?.textContent) {
+      const result = tryParse(el.textContent);
+      if (result) return result;
+    }
+  }
+
+  // Strategy 2: Buy box area
+  const buyBox = doc.querySelector("#ppd, #buyBoxAccordion, #desktop_buybox");
+  if (buyBox?.textContent) {
+    const result = tryParse(buyBox.textContent);
+    if (result) return result;
+  }
+
+  // Strategy 3: Detail bullets
+  const bullets = doc.querySelector("#detailBullets_feature_div, #detail-bullets");
+  if (bullets?.textContent) {
+    const result = tryParse(bullets.textContent);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+/**
  * Extract "Other sellers" count and min price from a product detail page.
  * Amazon shows this as "New (X) from $Y.YY" or "X new from $Y.YY" etc.
  */
@@ -424,7 +498,7 @@ export function createRateLimitedDetailFetcher(
       const result = await fetchProductDetails(item.asin);
       item.resolve(result);
     } catch {
-      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null });
+      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null });
     } finally {
       active--;
       if (queue.length > 0) {

@@ -43,6 +43,7 @@ export interface ExportRow {
   sellerTrust: number | null;
   listingIntegrity: number | null;
   dealScore: number | null;
+  multiBuyOffer: string;
   reviewSummary: string;
   url: string;
 }
@@ -81,6 +82,7 @@ export function buildExportRows(
         sellerTrust: sellerTrust?.score ?? null,
         listingIntegrity: listing?.score ?? null,
         dealScore: maps.dealScoreMap.get(asin) ?? null,
+        multiBuyOffer: p.multiBuyOffer?.text ?? "",
         reviewSummary: summary?.oneLiner ?? "",
         url: `https://www.amazon.com/dp/${asin}`,
       };
@@ -94,7 +96,7 @@ const CSV_HEADERS: (keyof ExportRow)[] = [
   "rating", "reviewCount",
   "isSponsored", "seller", "fulfillment", "countryOfOrigin",
   "reviewQuality", "trustScore", "sellerTrust", "listingIntegrity",
-  "dealScore", "reviewSummary", "url",
+  "dealScore", "multiBuyOffer", "reviewSummary", "url",
 ];
 
 const CSV_LABELS: Record<string, string> = {
@@ -116,6 +118,7 @@ const CSV_LABELS: Record<string, string> = {
   sellerTrust: "Seller Trust",
   listingIntegrity: "Listing Integrity",
   dealScore: "Deal Score",
+  multiBuyOffer: "Multi-Buy Offer",
   reviewSummary: "Review Summary",
   url: "URL",
 };

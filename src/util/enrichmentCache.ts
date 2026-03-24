@@ -11,7 +11,7 @@ import type { TrustScoreResult } from "../review/trustScore";
 import type { SellerTrustResult } from "../seller/trust";
 import type { ListingIntegrityResult } from "../seller/listingSignals";
 import type { ReviewSummary } from "../review/summary";
-import type { SellerInfo } from "../types";
+import type { SellerInfo, MultiBuyOffer } from "../types";
 
 const CACHE_PREFIX = "bas-ec-";
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -37,6 +37,7 @@ const MAP_KEYS = [
   "listingIntegrityMap",
   "dealScoreExportMap",
   "reviewSummaryMap",
+  "multiBuyMap",
 ] as const;
 
 type MapKey = (typeof MAP_KEYS)[number];
@@ -106,6 +107,7 @@ export interface EnrichmentCacheMaps {
   listingIntegrityMap: Map<string, ListingIntegrityResult>;
   dealScoreExportMap: Map<string, number>;
   reviewSummaryMap: Map<string, ReviewSummary>;
+  multiBuyMap: Map<string, MultiBuyOffer>;
 }
 
 /** Bulk save all enrichment maps to sessionStorage. */
@@ -121,6 +123,7 @@ export function saveAllEnrichment(maps: EnrichmentCacheMaps): void {
   saveMapToCache("listingIntegrityMap", maps.listingIntegrityMap);
   saveMapToCache("dealScoreExportMap", maps.dealScoreExportMap);
   saveMapToCache("reviewSummaryMap", maps.reviewSummaryMap);
+  saveMapToCache("multiBuyMap", maps.multiBuyMap);
 }
 
 /** Bulk load all enrichment maps from sessionStorage. */
@@ -137,6 +140,7 @@ export function restoreAllEnrichment(): EnrichmentCacheMaps {
     listingIntegrityMap: loadMapFromCache<ListingIntegrityResult>("listingIntegrityMap"),
     dealScoreExportMap: loadMapFromCache<number>("dealScoreExportMap"),
     reviewSummaryMap: loadMapFromCache<ReviewSummary>("reviewSummaryMap"),
+    multiBuyMap: loadMapFromCache<MultiBuyOffer>("multiBuyMap"),
   };
 }
 
