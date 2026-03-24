@@ -3,7 +3,7 @@
  * product detail page. Used as a fallback for data not available on search cards.
  */
 
-import type { SellerInfo, FulfillmentType, MultiBuyOffer } from "../types";
+import type { SellerInfo, FulfillmentType, MultiBuyOffer, BsrInfo } from "../types";
 
 const TAG = "[BAS]";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -19,6 +19,8 @@ export interface ProductDetailResult {
   otherSellersMinPrice: number | null;
   /** Multi-buy promotional offer (e.g., "Buy 2, save 10%"). */
   multiBuyOffer: MultiBuyOffer | null;
+  /** Best Sellers Rank in top-level category. */
+  bsr: BsrInfo | null;
 }
 
 /**
@@ -38,7 +40,7 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
 
     if (!response.ok) {
       console.warn(TAG, `Detail fetch failed for ${asin}: HTTP ${response.status}`);
-      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null };
+      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null };
     }
 
     const html = await response.text();
@@ -58,10 +60,11 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
       otherSellersCount: otherSellers.count,
       otherSellersMinPrice: otherSellers.minPrice,
       multiBuyOffer: extractMultiBuyOffer(doc),
+      bsr: extractBsr(doc),
     };
   } catch (err) {
     console.warn(TAG, `Error fetching details for ${asin}:`, err);
-    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null };
+    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null };
   }
 }
 
@@ -344,6 +347,72 @@ export function extractMultiBuyOffer(doc: Document): MultiBuyOffer | null {
 }
 
 /**
+ * Extract Best Sellers Rank from a product detail page.
+ * Amazon shows BSR in product details tables or detail bullets as
+ * "#X in Category" or "Best Sellers Rank: #X in Category".
+ */
+export function extractBsr(doc: Document): BsrInfo | null {
+  const BSR_PATTERN = /#([\d,]+)\s+in\s+([A-Za-z][A-Za-z &',()-]+)/;
+
+  // Strategy 1: Product details tables (most common location)
+  const tableSelectors = [
+    "#productDetails_detailBullets_sections1",
+    "#prodDetails",
+    "#productDetails_db_sections",
+    "#detailBulletsWrapper_feature_div",
+  ];
+  for (const sel of tableSelectors) {
+    const section = doc.querySelector(sel);
+    if (!section) continue;
+    const rows = section.querySelectorAll("tr, li, span");
+    for (const row of rows) {
+      const text = row.textContent ?? "";
+      if (/best\s*sellers?\s*rank/i.test(text) || /amazon\s*best\s*sellers/i.test(text)) {
+        const match = text.match(BSR_PATTERN);
+        if (match) {
+          return {
+            rank: parseInt(match[1].replace(/,/g, ""), 10),
+            category: match[2].trim().replace(/\s*\(.*$/, ""),
+          };
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Detail bullets (older layout)
+  const bullets = doc.querySelector("#detailBullets_feature_div, #detail-bullets");
+  if (bullets?.textContent) {
+    const text = bullets.textContent;
+    if (/best\s*sellers?\s*rank/i.test(text)) {
+      const match = text.match(BSR_PATTERN);
+      if (match) {
+        return {
+          rank: parseInt(match[1].replace(/,/g, ""), 10),
+          category: match[2].trim().replace(/\s*\(.*$/, ""),
+        };
+      }
+    }
+  }
+
+  // Strategy 3: Broader page search for BSR text
+  const detailSection = doc.querySelector("#detailBulletsWrapper_feature_div, #prodDetails, #ppd");
+  if (detailSection?.textContent) {
+    const text = detailSection.textContent;
+    if (/best\s*sellers?\s*rank/i.test(text)) {
+      const match = text.match(BSR_PATTERN);
+      if (match) {
+        return {
+          rank: parseInt(match[1].replace(/,/g, ""), 10),
+          category: match[2].trim().replace(/\s*\(.*$/, ""),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Extract "Other sellers" count and min price from a product detail page.
  * Amazon shows this as "New (X) from $Y.YY" or "X new from $Y.YY" etc.
  */
@@ -498,7 +567,7 @@ export function createRateLimitedDetailFetcher(
       const result = await fetchProductDetails(item.asin);
       item.resolve(result);
     } catch {
-      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null });
+      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null });
     } finally {
       active--;
       if (queue.length > 0) {

@@ -11,6 +11,7 @@ import type { TrustScoreResult } from "../../review/trustScore";
 import type { SellerTrustResult } from "../../seller/trust";
 import type { ListingIntegrityResult } from "../../seller/listingSignals";
 import type { DealScore } from "../dealScoring";
+import type { BsrInfo } from "../../types";
 
 const BADGE_CLASS = "bas-confidence";
 
@@ -19,6 +20,7 @@ export interface ConfidenceInput {
   sellerTrust?: SellerTrustResult;
   listingIntegrity?: ListingIntegrityResult;
   dealScore?: DealScore;
+  bsr?: BsrInfo;
 }
 
 export const CONFIDENCE_BADGE_STYLES = `
@@ -97,7 +99,21 @@ export function injectConfidenceBadge(
   for (const dot of dots) {
     tooltipLines.push(dot.tooltipLine);
   }
+  if (input.bsr) {
+    tooltipLines.push(`📊 BSR: #${input.bsr.rank.toLocaleString()} in ${input.bsr.category}`);
+  }
   badge.title = tooltipLines.join("\n");
+
+  // Add BSR compact label if available
+  if (input.bsr && dots.length > 0) {
+    const sep = document.createElement("span");
+    sep.className = `${BADGE_CLASS}-sep`;
+    badge.appendChild(sep);
+    const bsrLabel = document.createElement("span");
+    bsrLabel.className = `${BADGE_CLASS}-dot`;
+    bsrLabel.textContent = `#${input.bsr.rank.toLocaleString()}`;
+    badge.appendChild(bsrLabel);
+  }
 
   // Insert near the top of the card
   const anchor = card.querySelector("h2, .a-size-medium, .a-size-base-plus");

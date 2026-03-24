@@ -57,7 +57,7 @@ import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSear
 import { computeSavingsStack, injectSavingsBadge, injectMultiBuyBadge, removeMultiBuyBadge, SAVINGS_BADGE_STYLES, MULTI_BUY_BADGE_STYLES } from "./ui/savingsBadge";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
-import type { FilterState, Product, SellerInfo, MultiBuyOffer, GlobalPreferences } from "../types";
+import type { FilterState, Product, SellerInfo, MultiBuyOffer, BsrInfo, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
 import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
 
@@ -157,6 +157,8 @@ const dealScoreExportMap = new Map<string, number>();
 const reviewSummaryMap = new Map<string, ReviewSummary>();
 /** Map ASIN → MultiBuyOffer from detail page. */
 const multiBuyMap = new Map<string, MultiBuyOffer>();
+/** Map ASIN → BsrInfo (Best Sellers Rank) from detail page. */
+const bsrMap = new Map<string, BsrInfo>();
 /** Last set of visible products (for export). */
 let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
@@ -171,7 +173,7 @@ function gatherEnrichmentMaps() {
   return {
     reviewScoreMap, productInsightsMap, reviewDataMap, brandMap,
     sellerMap, originMap, trustScoreMap, sellerTrustMap,
-    listingIntegrityMap, dealScoreExportMap, reviewSummaryMap, multiBuyMap,
+    listingIntegrityMap, dealScoreExportMap, reviewSummaryMap, multiBuyMap, bsrMap,
   };
 }
 
@@ -190,6 +192,7 @@ function mergeFromCache(): void {
   for (const [k, v] of cached.dealScoreExportMap) if (!dealScoreExportMap.has(k)) dealScoreExportMap.set(k, v);
   for (const [k, v] of cached.reviewSummaryMap) if (!reviewSummaryMap.has(k)) reviewSummaryMap.set(k, v);
   for (const [k, v] of cached.multiBuyMap) if (!multiBuyMap.has(k)) multiBuyMap.set(k, v);
+  for (const [k, v] of cached.bsrMap) if (!bsrMap.has(k)) bsrMap.set(k, v);
 }
 
 /**
@@ -415,6 +418,7 @@ function watchForSoftNavigation(): void {
       dealScoreExportMap.clear();
       reviewSummaryMap.clear();
       multiBuyMap.clear();
+      bsrMap.clear();
       reviewScoreMap.clear();
       productInsightsMap.clear();
       reviewDataMap.clear();
@@ -576,6 +580,9 @@ function attachCachedEnrichment(product: Product): void {
   }
   if (!product.multiBuyOffer && multiBuyMap.has(product.asin)) {
     product.multiBuyOffer = multiBuyMap.get(product.asin)!;
+  }
+  if (!product.bsr && bsrMap.has(product.asin)) {
+    product.bsr = bsrMap.get(product.asin)!;
   }
   if (reviewScoreMap.has(product.asin)) {
     product.reviewQuality = reviewScoreMap.get(product.asin)!.score;
@@ -1028,6 +1035,7 @@ function injectConfidenceBadgeForProduct(asin: string, card: HTMLElement): void 
   if (trustScoreMap.has(asin)) input.reviewTrust = trustScoreMap.get(asin);
   if (sellerTrustMap.has(asin)) input.sellerTrust = sellerTrustMap.get(asin);
   if (listingIntegrityMap.has(asin)) input.listingIntegrity = listingIntegrityMap.get(asin);
+  if (bsrMap.has(asin)) input.bsr = bsrMap.get(asin);
   // Deal score is computed synchronously during filtering, check the map
   // (dealScoreMap only stores the numeric score, not the full object, so skip for now)
 
@@ -1209,6 +1217,11 @@ function queueDetailEnrichment(products: Product[]): void {
           if (details.multiBuyOffer) {
             multiBuyMap.set(asin, details.multiBuyOffer);
             product.multiBuyOffer = details.multiBuyOffer;
+          }
+
+          if (details.bsr) {
+            bsrMap.set(asin, details.bsr);
+            product.bsr = details.bsr;
           }
         }
 

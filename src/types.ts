@@ -30,6 +30,16 @@ export interface Product {
   effectivePrice?: number;
   /** Multi-buy promotional offer from detail page (e.g., "Buy 2, save 10%"). */
   multiBuyOffer?: MultiBuyOffer;
+  /** Best Sellers Rank from detail page. */
+  bsr?: BsrInfo;
+}
+
+/** Best Sellers Rank extracted from a product detail page. */
+export interface BsrInfo {
+  /** Numeric rank (e.g., 247). */
+  rank: number;
+  /** Top-level category (e.g., "Electronics"). */
+  category: string;
 }
 
 /** Multi-buy promotional offer extracted from a product detail page. */
