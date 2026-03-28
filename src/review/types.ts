@@ -44,6 +44,8 @@ export interface ProductReviewData {
   reviews: ReviewData[];
   totalRatings: number;
   averageRating: number;
+  /** Customer review media (images/videos). */
+  mediaGallery?: ReviewMediaGallery;
 }
 
 /** Cache entry for a scored product. */
@@ -132,4 +134,30 @@ export interface CachedProductInsights {
   asin: string;
   insights: ProductInsights;
   cachedAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Review media (photos / videos from customer reviews)
+// ---------------------------------------------------------------------------
+
+/** A single image or video attachment from a customer review. */
+export interface ReviewMedia {
+  /** Full-size URL. */
+  url: string;
+  /** Thumbnail URL (may be same as url for images). */
+  thumbnailUrl: string;
+  /** Media type. */
+  type: "image" | "video";
+  /** Star rating of the review containing this media. */
+  reviewRating: number;
+  /** Whether the review is a verified purchase. */
+  verified: boolean;
+}
+
+/** Aggregated media gallery for a product. */
+export interface ReviewMediaGallery {
+  /** All media items extracted from reviews, most-helpful first. */
+  items: ReviewMedia[];
+  /** Total number of reviews that contained media. */
+  reviewsWithMedia: number;
 }

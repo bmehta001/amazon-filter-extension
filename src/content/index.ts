@@ -53,13 +53,14 @@ import { loadCompareItems, onCompareChange, resetCompareCache } from "../compare
 import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
+import { injectReviewGallery, REVIEW_GALLERY_STYLES } from "./ui/reviewGallery";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
 import { computeSavingsStack, injectSavingsBadge, injectMultiBuyBadge, removeMultiBuyBadge, SAVINGS_BADGE_STYLES, MULTI_BUY_BADGE_STYLES } from "./ui/savingsBadge";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
 import type { CpscRecall } from "../recall/types";
 import type { FilterState, Product, SellerInfo, MultiBuyOffer, BsrInfo, GlobalPreferences } from "../types";
 import { DEFAULT_PREFERENCES } from "../types";
-import type { ReviewScore, ProductInsights, ProductReviewData } from "../review/types";
+import type { ReviewScore, ProductInsights, ProductReviewData, ReviewMediaGallery } from "../review/types";
 
 // CSS classes for product card visual states
 const REVIEW_SUMMARY_STYLES = SUMMARY_PANEL_STYLES;
@@ -85,6 +86,7 @@ ${TOUR_STYLES}
 ${ADVANCED_SEARCH_STYLES}
 ${SAVINGS_BADGE_STYLES}
 ${MULTI_BUY_BADGE_STYLES}
+${REVIEW_GALLERY_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -159,6 +161,8 @@ const reviewSummaryMap = new Map<string, ReviewSummary>();
 const multiBuyMap = new Map<string, MultiBuyOffer>();
 /** Map ASIN → BsrInfo (Best Sellers Rank) from detail page. */
 const bsrMap = new Map<string, BsrInfo>();
+/** Map ASIN → ReviewMediaGallery from customer reviews. */
+const reviewMediaMap = new Map<string, ReviewMediaGallery>();
 /** Last set of visible products (for export). */
 let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
@@ -174,6 +178,7 @@ function gatherEnrichmentMaps() {
     reviewScoreMap, productInsightsMap, reviewDataMap, brandMap,
     sellerMap, originMap, trustScoreMap, sellerTrustMap,
     listingIntegrityMap, dealScoreExportMap, reviewSummaryMap, multiBuyMap, bsrMap,
+    reviewMediaMap,
   };
 }
 
@@ -193,6 +198,7 @@ function mergeFromCache(): void {
   for (const [k, v] of cached.reviewSummaryMap) if (!reviewSummaryMap.has(k)) reviewSummaryMap.set(k, v);
   for (const [k, v] of cached.multiBuyMap) if (!multiBuyMap.has(k)) multiBuyMap.set(k, v);
   for (const [k, v] of cached.bsrMap) if (!bsrMap.has(k)) bsrMap.set(k, v);
+  for (const [k, v] of cached.reviewMediaMap) if (!reviewMediaMap.has(k)) reviewMediaMap.set(k, v);
 }
 
 /**
@@ -419,6 +425,7 @@ function watchForSoftNavigation(): void {
       reviewSummaryMap.clear();
       multiBuyMap.clear();
       bsrMap.clear();
+      reviewMediaMap.clear();
       reviewScoreMap.clear();
       productInsightsMap.clear();
       reviewDataMap.clear();
@@ -1065,6 +1072,9 @@ function queueReviewAnalysis(products: Product[]): void {
       if (productInsightsMap.has(asin)) {
         injectReviewInsights(product.element, productInsightsMap.get(asin)!, currentFilters.ignoredCategories);
       }
+      if (reviewMediaMap.has(asin)) {
+        injectReviewGallery(product.element, reviewMediaMap.get(asin)!);
+      }
       continue;
     }
 
@@ -1135,6 +1145,12 @@ function queueReviewAnalysis(products: Product[]): void {
             const panelData: SummaryPanelData = { summary, insights };
             injectSummaryPanel(product.element, panelData);
             reviewSummaryMap.set(asin, summary);
+          }
+
+          // Inject review photo/video gallery
+          if (reviewData.mediaGallery && reviewData.mediaGallery.items.length > 0) {
+            reviewMediaMap.set(asin, reviewData.mediaGallery);
+            injectReviewGallery(product.element, reviewData.mediaGallery);
           }
         }
       } catch (err) {

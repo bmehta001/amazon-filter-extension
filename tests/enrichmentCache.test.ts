@@ -113,6 +113,7 @@ describe("enrichmentCache", () => {
         reviewSummaryMap: new Map([["A1", { pros: [], cons: [], oneLiner: "Great!" }]]),
         multiBuyMap: new Map([["A1", { text: "Buy 2, save 10%", minQuantity: 2 }]]),
         bsrMap: new Map([["A1", { rank: 247, category: "Electronics" }]]),
+        reviewMediaMap: new Map([["A1", { items: [{ url: "https://img.com/full.jpg", thumbnailUrl: "https://img.com/thumb.jpg", type: "image" as const, reviewRating: 5, verified: true }], reviewsWithMedia: 1 }]]),
       };
 
       saveAllEnrichment(maps);
@@ -134,6 +135,8 @@ describe("enrichmentCache", () => {
       expect(restored.multiBuyMap.get("A1")?.text).toBe("Buy 2, save 10%");
       expect(restored.bsrMap.get("A1")?.rank).toBe(247);
       expect(restored.bsrMap.get("A1")?.category).toBe("Electronics");
+      expect(restored.reviewMediaMap.get("A1")?.items.length).toBe(1);
+      expect(restored.reviewMediaMap.get("A1")?.items[0].verified).toBe(true);
     });
 
     it("returns empty maps when nothing is cached", () => {

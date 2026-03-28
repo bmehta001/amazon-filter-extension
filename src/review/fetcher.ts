@@ -1,4 +1,4 @@
-import type { HistogramData, ProductReviewData, ReviewData } from "./types";
+import type { HistogramData, ProductReviewData, ReviewData, ReviewMedia, ReviewMediaGallery } from "./types";
 
 const TAG = "[BAS]";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -118,6 +118,127 @@ function parseHelpfulVotes(el: Element): number {
 }
 
 // ---------------------------------------------------------------------------
+// Review media (images & videos)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract media items from a single review element.
+ * Amazon review images appear in `img.review-image-tile` or inside
+ * `.review-image-container`, `.cr-lightbox-image-thumbnail` containers.
+ * Videos appear in `video` tags or `div[data-hook="review-video-tile"]`.
+ */
+function parseReviewMediaItems(el: Element, rating: number, verified: boolean): ReviewMedia[] {
+  const items: ReviewMedia[] = [];
+  const seen = new Set<string>();
+
+  // Strategy 1: review-image-tile (most common)
+  const imageTiles = el.querySelectorAll<HTMLImageElement>(
+    'img.review-image-tile, img[data-hook="review-image-tile"]',
+  );
+  for (const img of imageTiles) {
+    const thumb = img.src || img.getAttribute("data-src") || "";
+    if (!thumb || seen.has(thumb)) continue;
+    seen.add(thumb);
+    // Amazon thumbnails use _SY88 or similar; replace with larger _SL500
+    const full = thumb.replace(/_S[XY]\d+_?/g, "_SL500_");
+    items.push({ url: full, thumbnailUrl: thumb, type: "image", reviewRating: rating, verified });
+  }
+
+  // Strategy 2: review-image-container links
+  const imageLinks = el.querySelectorAll<HTMLAnchorElement>(
+    '.review-image-container a[href*="/images/"], a[data-hook="review-image-tile-section"]',
+  );
+  for (const link of imageLinks) {
+    const img = link.querySelector<HTMLImageElement>("img");
+    if (!img) continue;
+    const thumb = img.src || img.getAttribute("data-src") || "";
+    if (!thumb || seen.has(thumb)) continue;
+    seen.add(thumb);
+    const full = thumb.replace(/_S[XY]\d+_?/g, "_SL500_");
+    items.push({ url: full, thumbnailUrl: thumb, type: "image", reviewRating: rating, verified });
+  }
+
+  // Strategy 3: generic review images (broader fallback)
+  const allImgs = el.querySelectorAll<HTMLImageElement>("img");
+  for (const img of allImgs) {
+    const src = img.src || img.getAttribute("data-src") || "";
+    // Only include Amazon media images (not icons, badges, etc.)
+    if (!src || seen.has(src)) continue;
+    if (!src.includes("images-amazon.com/images") && !src.includes("m.media-amazon.com/images")) continue;
+    // Skip tiny icons (< 50px likely an icon)
+    if (img.width > 0 && img.width < 50) continue;
+    // Skip common non-review images
+    if (src.includes("/icons/") || src.includes("/badge")) continue;
+    seen.add(src);
+    const full = src.replace(/_S[XY]\d+_?/g, "_SL500_");
+    items.push({ url: full, thumbnailUrl: src, type: "image", reviewRating: rating, verified });
+  }
+
+  // Strategy 4: video tiles
+  const videoTiles = el.querySelectorAll<HTMLElement>(
+    'div[data-hook="review-video-tile"], video, [data-video-url]',
+  );
+  for (const tile of videoTiles) {
+    const videoUrl =
+      tile.getAttribute("data-video-url") ||
+      (tile instanceof HTMLVideoElement ? tile.src : "") ||
+      tile.querySelector<HTMLSourceElement>("source")?.src || "";
+    if (!videoUrl || seen.has(videoUrl)) continue;
+    seen.add(videoUrl);
+    // Try to find a poster/thumbnail
+    const poster = tile instanceof HTMLVideoElement
+      ? (tile.poster || "")
+      : (tile.querySelector<HTMLImageElement>("img")?.src || "");
+    items.push({
+      url: videoUrl,
+      thumbnailUrl: poster || videoUrl,
+      type: "video",
+      reviewRating: rating,
+      verified,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Extract all review media from a parsed document.
+ * Scans review elements and collects images/videos.
+ */
+export function parseReviewMediaGallery(doc: Document): ReviewMediaGallery {
+  const reviewEls = doc.querySelectorAll('div[data-hook="review"], div.review');
+  const allItems: ReviewMedia[] = [];
+  let reviewsWithMedia = 0;
+
+  for (const el of reviewEls) {
+    const rating = parseReviewRating(el);
+    const verified = isVerifiedPurchase(el);
+    const items = parseReviewMediaItems(el, rating, verified);
+    if (items.length > 0) {
+      reviewsWithMedia++;
+      allItems.push(...items);
+    }
+  }
+
+  // Also check for top-level image gallery section (outside individual reviews)
+  const topGallery = doc.querySelector('#cr-media-gallery-popover, [data-hook="cr-media-gallery"]');
+  if (topGallery) {
+    const imgs = topGallery.querySelectorAll<HTMLImageElement>("img");
+    const seen = new Set(allItems.map((i) => i.thumbnailUrl));
+    for (const img of imgs) {
+      const src = img.src || img.getAttribute("data-src") || "";
+      if (!src || seen.has(src)) continue;
+      if (!src.includes("images-amazon.com") && !src.includes("m.media-amazon.com")) continue;
+      seen.add(src);
+      const full = src.replace(/_S[XY]\d+_?/g, "_SL500_");
+      allItems.push({ url: full, thumbnailUrl: src, type: "image", reviewRating: 0, verified: false });
+    }
+  }
+
+  return { items: allItems, reviewsWithMedia };
+}
+
+// ---------------------------------------------------------------------------
 // Total ratings & average rating
 // ---------------------------------------------------------------------------
 
@@ -187,6 +308,7 @@ export async function fetchProductReviewData(asin: string): Promise<ProductRevie
       reviews: parseReviews(doc),
       totalRatings: parseTotalRatings(doc),
       averageRating: parseAverageRating(doc),
+      mediaGallery: parseReviewMediaGallery(doc),
     };
   } catch (err) {
     console.warn(TAG, `Error fetching review data for ${asin}:`, err);
