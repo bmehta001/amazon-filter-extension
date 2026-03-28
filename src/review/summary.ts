@@ -4,6 +4,7 @@
  */
 
 import type { ReviewData, TopicScore } from "./types";
+import type { WeightedTopicScore } from "./categoryWeights";
 import { REVIEW_CATEGORIES } from "./categories";
 
 /** A summarized aspect mentioned across reviews. */
@@ -18,6 +19,8 @@ export interface ReviewAspect {
   sentiment: "positive" | "negative";
   /** Trend indicator if available. */
   trend?: "rising" | "falling" | "stable";
+  /** Category weight multiplier (if weighted). */
+  weight?: number;
 }
 
 /** Generated summary for a product's reviews. */
@@ -28,6 +31,10 @@ export interface ReviewSummary {
   cons: ReviewAspect[];
   /** One-line summary string for card display. */
   oneLiner: string;
+  /** Department label if category weights were applied. */
+  departmentLabel?: string;
+  /** Weighted aggregate score (1-5 scale) if weights applied. */
+  weightedScore?: number;
 }
 
 /**
@@ -57,36 +64,57 @@ const ASPECTS: { label: string; keywords: string[] }[] = [
 
 /**
  * Generate a review summary from sentence-level TopicScores (preferred).
- * Reuses the deeper analysis from categories.ts instead of re-scanning text.
+ * When WeightedTopicScores are passed, uses weight-adjusted ratings for
+ * sorting and sentiment, and includes department context.
  */
-export function generateSummaryFromTopicScores(topicScores: TopicScore[]): ReviewSummary | null {
+export function generateSummaryFromTopicScores(
+  topicScores: TopicScore[],
+  departmentLabel?: string,
+  weightedAggregate?: number,
+): ReviewSummary | null {
   if (topicScores.length === 0) return null;
 
   const categoryMeta = new Map(REVIEW_CATEGORIES.map((c) => [c.id, c]));
 
   const allAspects: ReviewAspect[] = topicScores
     .filter((ts) => ts.reviewMentions >= 1)
-    .map((ts) => ({
-      label: categoryMeta.get(ts.categoryId)?.label ?? ts.categoryId,
-      mentions: ts.reviewMentions,
-      avgRating: ts.avgRating,
-      sentiment: (ts.avgRating >= 3.5 ? "positive" : "negative") as "positive" | "negative",
-      trend: ts.trend,
-    }));
+    .map((ts) => {
+      const isWeighted = "weight" in ts && "weightedAvgRating" in ts;
+      const wts = ts as WeightedTopicScore;
+      // Use weighted rating for sentiment when available
+      const effectiveRating = isWeighted ? wts.weightedAvgRating : ts.avgRating;
+      return {
+        label: categoryMeta.get(ts.categoryId)?.label ?? ts.categoryId,
+        mentions: ts.reviewMentions,
+        avgRating: ts.avgRating,
+        sentiment: (effectiveRating >= 3.5 ? "positive" : "negative") as "positive" | "negative",
+        trend: ts.trend,
+        weight: isWeighted ? wts.weight : undefined,
+      };
+    });
 
   if (allAspects.length === 0) return null;
 
+  // Sort by weighted importance: weight * mentions (high-weight categories surface first)
+  const sortScore = (a: ReviewAspect) => (a.weight ?? 1) * a.mentions;
+
   const pros = allAspects
     .filter((a) => a.sentiment === "positive")
-    .sort((a, b) => b.mentions - a.mentions || b.avgRating - a.avgRating)
+    .sort((a, b) => sortScore(b) - sortScore(a) || b.avgRating - a.avgRating)
     .slice(0, 3);
 
   const cons = allAspects
     .filter((a) => a.sentiment === "negative")
-    .sort((a, b) => b.mentions - a.mentions || a.avgRating - b.avgRating)
+    .sort((a, b) => sortScore(b) - sortScore(a) || a.avgRating - b.avgRating)
     .slice(0, 2);
 
-  return { pros, cons, oneLiner: buildOneLiner(pros, cons) };
+  return {
+    pros,
+    cons,
+    oneLiner: buildOneLiner(pros, cons, departmentLabel, weightedAggregate),
+    departmentLabel,
+    weightedScore: weightedAggregate,
+  };
 }
 
 /**
@@ -147,8 +175,18 @@ export function generateReviewSummary(reviews: ReviewData[]): ReviewSummary | nu
 }
 
 /** Build a compact one-line summary for display on a card. */
-function buildOneLiner(pros: ReviewAspect[], cons: ReviewAspect[]): string {
+function buildOneLiner(
+  pros: ReviewAspect[],
+  cons: ReviewAspect[],
+  departmentLabel?: string,
+  weightedScore?: number,
+): string {
   const parts: string[] = [];
+
+  // Department-weighted score indicator
+  if (departmentLabel && weightedScore) {
+    parts.push(`🏷️ ${departmentLabel}: ${weightedScore.toFixed(1)}★`);
+  }
 
   if (pros.length > 0) {
     const proLabels = pros.map((p) => {

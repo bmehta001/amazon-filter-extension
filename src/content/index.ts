@@ -1135,11 +1135,15 @@ function queueReviewAnalysis(products: Product[]): void {
           // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
           // Apply category weights if a department profile is active
           let topicScoresForSummary = insights.topicScores;
+          let deptLabel: string | undefined;
+          let weightedAgg: number | undefined;
           if (currentWeightProfile && currentWeightProfile.departmentId !== "default") {
             topicScoresForSummary = applyWeights(insights.topicScores, currentWeightProfile);
+            deptLabel = currentWeightProfile.label;
+            weightedAgg = computeWeightedAggregate(insights.topicScores, currentWeightProfile);
           }
           const summary = (topicScoresForSummary.length > 0)
-            ? generateSummaryFromTopicScores(topicScoresForSummary)
+            ? generateSummaryFromTopicScores(topicScoresForSummary, deptLabel, weightedAgg)
             : generateReviewSummary(reviewData.reviews);
           if (summary) {
             const panelData: SummaryPanelData = { summary, insights };
