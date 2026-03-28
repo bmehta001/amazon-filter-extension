@@ -1,6 +1,6 @@
 import { loadPreferences, savePreferences } from "../util/storage";
-import { loadWatchlist, removeFromWatchlist } from "../watchlist/storage";
-import type { WatchlistItem } from "../watchlist/storage";
+import { loadWatchlist, removeFromWatchlist, updateTargetPrice, loadNotificationPrefs, saveNotificationPrefs } from "../watchlist/storage";
+import type { WatchlistItem, NotificationPreferences, PriceSnapshot } from "../watchlist/storage";
 import {
   loadShortlists,
   createShortlist,
@@ -162,6 +162,9 @@ async function init(): Promise<void> {
 
   // Render watchlist
   await renderWatchlist();
+
+  // Render notification preferences
+  await renderNotificationPrefs();
 
   // Render shortlists
   await renderShortlists();
@@ -389,39 +392,113 @@ function createWatchlistItemEl(item: WatchlistItem): HTMLElement {
   const info = document.createElement("div");
   info.className = "watchlist-info";
 
-  const title = document.createElement("div");
-  title.className = "watchlist-title";
-  title.textContent = item.title;
+  // Title as link to product page
+  const titleLink = document.createElement("a");
+  titleLink.className = "watchlist-title";
+  titleLink.textContent = item.title;
+  titleLink.href = `https://${item.domain}/dp/${item.asin}`;
+  titleLink.target = "_blank";
 
-  const prices = document.createElement("div");
-  prices.className = "watchlist-prices";
+  // Price comparison bar
+  const priceBar = document.createElement("div");
+  priceBar.className = "watchlist-price-bar";
+
   const safeLastPrice = Number.isFinite(item.lastKnownPrice) ? item.lastKnownPrice : 0;
   const safeAddedPrice = Number.isFinite(item.priceWhenAdded) ? item.priceWhenAdded : 0;
   const safeTarget = Number.isFinite(item.targetPrice) ? item.targetPrice : 0;
   const diff = safeLastPrice - safeAddedPrice;
-  const diffClass = diff < 0 ? "price-drop" : diff > 0 ? "price-up" : "";
-  const diffText =
-    diff < 0
-      ? ` (↓ $${Math.abs(diff).toFixed(2)})`
-      : diff > 0
-        ? ` (↑ $${diff.toFixed(2)})`
-        : "";
 
-  const nowLabel = document.createTextNode("Now: ");
-  const nowStrong = document.createElement("strong");
-  nowStrong.textContent = `$${safeLastPrice.toFixed(2)}`;
-  prices.appendChild(nowLabel);
-  prices.appendChild(nowStrong);
-  if (diffText) {
-    const diffSpan = document.createElement("span");
-    diffSpan.className = diffClass;
-    diffSpan.textContent = diffText;
-    prices.appendChild(diffSpan);
+  // Current price with change indicator
+  const currentEl = document.createElement("span");
+  currentEl.className = "watchlist-current-price";
+  currentEl.textContent = `$${safeLastPrice.toFixed(2)}`;
+  if (diff < 0) {
+    currentEl.classList.add("price-drop");
+    currentEl.textContent += ` ↓${Math.abs(diff).toFixed(2)}`;
+  } else if (diff > 0) {
+    currentEl.classList.add("price-up");
+    currentEl.textContent += ` ↑${diff.toFixed(2)}`;
   }
-  prices.appendChild(document.createTextNode(` · Target: $${safeTarget.toFixed(2)}`));
 
-  info.appendChild(title);
-  info.appendChild(prices);
+  const origEl = document.createElement("span");
+  origEl.className = "watchlist-orig-price";
+  origEl.textContent = `Was $${safeAddedPrice.toFixed(2)}`;
+
+  // Editable target price
+  const targetEl = document.createElement("span");
+  targetEl.className = "watchlist-target-price";
+  targetEl.title = "Click to edit target price";
+
+  const targetLabel = document.createElement("span");
+  targetLabel.textContent = `Target: $${safeTarget.toFixed(2)}`;
+
+  const editBtn = document.createElement("button");
+  editBtn.className = "watchlist-edit-target";
+  editBtn.textContent = "✎";
+  editBtn.title = "Edit target price";
+  editBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const input = prompt("Enter target price ($):", safeTarget.toFixed(2));
+    if (input !== null) {
+      const newTarget = parseFloat(input);
+      if (Number.isFinite(newTarget) && newTarget > 0) {
+        await updateTargetPrice(item.asin, newTarget);
+        await renderWatchlist();
+      }
+    }
+  });
+
+  targetEl.appendChild(targetLabel);
+  targetEl.appendChild(editBtn);
+
+  // Progress toward target
+  const progressContainer = document.createElement("div");
+  progressContainer.className = "watchlist-progress";
+  if (safeAddedPrice > safeTarget && safeTarget > 0) {
+    const totalDrop = safeAddedPrice - safeTarget;
+    const currentDrop = Math.max(0, safeAddedPrice - safeLastPrice);
+    const pct = Math.min(100, Math.round((currentDrop / totalDrop) * 100));
+    const bar = document.createElement("div");
+    bar.className = "watchlist-progress-bar";
+    const fill = document.createElement("div");
+    fill.className = "watchlist-progress-fill";
+    fill.style.width = `${pct}%`;
+    fill.style.background = pct >= 100 ? "#067d62" : "#007185";
+    bar.appendChild(fill);
+    const pctLabel = document.createElement("span");
+    pctLabel.className = "watchlist-progress-label";
+    pctLabel.textContent = pct >= 100 ? "Target reached!" : `${pct}% to target`;
+    progressContainer.appendChild(bar);
+    progressContainer.appendChild(pctLabel);
+  }
+
+  priceBar.appendChild(currentEl);
+  priceBar.appendChild(origEl);
+  priceBar.appendChild(targetEl);
+
+  // Mini price history sparkline
+  const history = item.priceHistory || [];
+  let sparklineEl: HTMLElement | null = null;
+  if (history.length >= 2) {
+    sparklineEl = createMiniSparkline(history, safeTarget);
+  }
+
+  // Last checked timestamp
+  const lastChecked = document.createElement("div");
+  lastChecked.className = "watchlist-last-checked";
+  const checkedDate = new Date(item.lastCheckedAt);
+  const ago = formatTimeAgo(checkedDate);
+  lastChecked.textContent = `Checked ${ago}`;
+  if ((item.consecutiveFailures || 0) > 0) {
+    lastChecked.textContent += ` · ${item.consecutiveFailures} failure${item.consecutiveFailures === 1 ? "" : "s"}`;
+    lastChecked.style.color = "#cc0c39";
+  }
+
+  info.appendChild(titleLink);
+  info.appendChild(priceBar);
+  info.appendChild(progressContainer);
+  if (sparklineEl) info.appendChild(sparklineEl);
+  info.appendChild(lastChecked);
 
   const removeBtn = document.createElement("button");
   removeBtn.className = "watchlist-remove";
@@ -435,6 +512,117 @@ function createWatchlistItemEl(item: WatchlistItem): HTMLElement {
   row.appendChild(info);
   row.appendChild(removeBtn);
   return row;
+}
+
+/** Draw an SVG sparkline from price history. */
+function createMiniSparkline(history: PriceSnapshot[], targetPrice: number): HTMLElement {
+  const container = document.createElement("div");
+  container.className = "watchlist-sparkline";
+
+  const prices = history.map((s) => s.price);
+  const minP = Math.min(...prices, targetPrice);
+  const maxP = Math.max(...prices);
+  const range = maxP - minP || 1;
+
+  const W = 200;
+  const H = 30;
+  const padding = 2;
+
+  const points = prices.map((p, i) => {
+    const x = padding + (i / Math.max(prices.length - 1, 1)) * (W - 2 * padding);
+    const y = padding + (1 - (p - minP) / range) * (H - 2 * padding);
+    return `${x},${y}`;
+  });
+
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // Target price line
+  const targetY = padding + (1 - (targetPrice - minP) / range) * (H - 2 * padding);
+  svg += `<line x1="${padding}" y1="${targetY}" x2="${W - padding}" y2="${targetY}" stroke="#067d62" stroke-width="0.5" stroke-dasharray="3,2" />`;
+
+  // Price line
+  svg += `<polyline fill="none" stroke="#007185" stroke-width="1.5" points="${points.join(" ")}" />`;
+
+  // Last point dot
+  const lastPoint = points[points.length - 1];
+  svg += `<circle cx="${lastPoint.split(",")[0]}" cy="${lastPoint.split(",")[1]}" r="2" fill="#007185" />`;
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+
+  // Labels
+  const labels = document.createElement("div");
+  labels.className = "watchlist-sparkline-labels";
+  const firstDate = new Date(history[0].checkedAt);
+  const lastDate = new Date(history[history.length - 1].checkedAt);
+  labels.textContent = `${formatShortDate(firstDate)} → ${formatShortDate(lastDate)}`;
+  container.appendChild(labels);
+
+  return container;
+}
+
+function formatTimeAgo(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatShortDate(date: Date): string {
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+// ── Notification Preferences ──────────────────────────────────────────
+
+async function renderNotificationPrefs(): Promise<void> {
+  const section = document.getElementById("notification-prefs");
+  if (!section) return;
+
+  const prefs = await loadNotificationPrefs();
+
+  const enabledCb = section.querySelector<HTMLInputElement>("#notif-enabled");
+  const quietStart = section.querySelector<HTMLSelectElement>("#notif-quiet-start");
+  const quietEnd = section.querySelector<HTMLSelectElement>("#notif-quiet-end");
+  const freqSelect = section.querySelector<HTMLSelectElement>("#notif-frequency");
+
+  if (enabledCb) enabledCb.checked = prefs.enabled;
+  if (quietStart) quietStart.value = String(prefs.quietHoursStart);
+  if (quietEnd) quietEnd.value = String(prefs.quietHoursEnd);
+  if (freqSelect) freqSelect.value = String(prefs.checkIntervalMinutes);
+
+  const onChange = async () => {
+    const updated: NotificationPreferences = {
+      enabled: enabledCb?.checked ?? true,
+      quietHoursStart: parseInt(quietStart?.value ?? "22", 10),
+      quietHoursEnd: parseInt(quietEnd?.value ?? "7", 10),
+      checkIntervalMinutes: parseInt(freqSelect?.value ?? "360", 10),
+    };
+    await saveNotificationPrefs(updated);
+
+    // Update the alarm interval in the service worker
+    try {
+      await chrome.runtime.sendMessage({
+        type: "updateWatchlistAlarm",
+        intervalMinutes: updated.checkIntervalMinutes,
+      });
+    } catch { /* service worker may not be running */ }
+
+    const saveStatus = document.getElementById("save-status");
+    if (saveStatus) {
+      saveStatus.textContent = "Saved ✓";
+      setTimeout(() => { saveStatus.textContent = ""; }, 1500);
+    }
+  };
+
+  enabledCb?.addEventListener("change", onChange);
+  quietStart?.addEventListener("change", onChange);
+  quietEnd?.addEventListener("change", onChange);
+  freqSelect?.addEventListener("change", onChange);
 }
 
 document.addEventListener("DOMContentLoaded", init);

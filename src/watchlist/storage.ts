@@ -3,6 +3,12 @@
  * and provides CRUD operations for the background service worker and popup.
  */
 
+/** A single price snapshot recorded during a background check. */
+export interface PriceSnapshot {
+  price: number;
+  checkedAt: string;
+}
+
 /** A single item in the price watchlist. */
 export interface WatchlistItem {
   /** Amazon ASIN. */
@@ -21,10 +27,15 @@ export interface WatchlistItem {
   lastCheckedAt: string;
   /** Amazon domain (e.g., "www.amazon.com"). */
   domain: string;
+  /** Rolling price history (most recent last). Max MAX_PRICE_HISTORY entries. */
+  priceHistory?: PriceSnapshot[];
+  /** Consecutive fetch failures (for backoff). Reset on success. */
+  consecutiveFailures?: number;
 }
 
 const STORAGE_KEY = "bas_watchlist";
 const MAX_WATCHLIST_ITEMS = 50;
+export const MAX_PRICE_HISTORY = 30;
 
 /** Load the full watchlist from chrome.storage.sync. */
 export async function loadWatchlist(): Promise<WatchlistItem[]> {
@@ -82,6 +93,8 @@ export async function addToWatchlist(
     addedAt: now,
     lastCheckedAt: now,
     domain,
+    priceHistory: [{ price: currentPrice, checkedAt: now }],
+    consecutiveFailures: 0,
   });
 
   await saveWatchlist(items);
@@ -93,7 +106,7 @@ export async function removeFromWatchlist(asin: string): Promise<void> {
   await saveWatchlist(items.filter((item) => item.asin !== asin));
 }
 
-/** Update the last known price for a watched item. */
+/** Update the last known price for a watched item and record in history. */
 export async function updateWatchlistPrice(
   asin: string,
   newPrice: number,
@@ -102,8 +115,18 @@ export async function updateWatchlistPrice(
   const item = items.find((i) => i.asin === asin);
   if (!item) return null;
 
+  const now = new Date().toISOString();
   item.lastKnownPrice = newPrice;
-  item.lastCheckedAt = new Date().toISOString();
+  item.lastCheckedAt = now;
+  item.consecutiveFailures = 0;
+
+  // Append to price history (trim to MAX_PRICE_HISTORY)
+  if (!item.priceHistory) item.priceHistory = [];
+  item.priceHistory.push({ price: newPrice, checkedAt: now });
+  if (item.priceHistory.length > MAX_PRICE_HISTORY) {
+    item.priceHistory = item.priceHistory.slice(-MAX_PRICE_HISTORY);
+  }
+
   await saveWatchlist(items);
   return item;
 }
@@ -118,4 +141,75 @@ export async function isWatched(asin: string): Promise<boolean> {
 export async function getWatchlistItem(asin: string): Promise<WatchlistItem | null> {
   const items = await loadWatchlist();
   return items.find((item) => item.asin === asin) || null;
+}
+
+/** Update the target price for a watched item. */
+export async function updateTargetPrice(
+  asin: string,
+  newTarget: number,
+): Promise<WatchlistItem | null> {
+  const items = await loadWatchlist();
+  const item = items.find((i) => i.asin === asin);
+  if (!item) return null;
+
+  item.targetPrice = newTarget;
+  await saveWatchlist(items);
+  return item;
+}
+
+/** Increment consecutive failure count for backoff logic. */
+export async function incrementFailures(asin: string): Promise<number> {
+  const items = await loadWatchlist();
+  const item = items.find((i) => i.asin === asin);
+  if (!item) return 0;
+
+  item.consecutiveFailures = (item.consecutiveFailures || 0) + 1;
+  await saveWatchlist(items);
+  return item.consecutiveFailures;
+}
+
+// ── Notification preferences ─────────────────────────────────────────
+
+const NOTIF_PREFS_KEY = "bas_notification_prefs";
+
+export interface NotificationPreferences {
+  /** Master toggle — if false, no notifications are sent. */
+  enabled: boolean;
+  /** Quiet hours (24h format). Notifications suppressed between start and end. */
+  quietHoursStart: number; // 0-23
+  quietHoursEnd: number;   // 0-23
+  /** Check frequency in minutes. Default 360 (6h). */
+  checkIntervalMinutes: number;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
+  enabled: true,
+  quietHoursStart: 22,
+  quietHoursEnd: 7,
+  checkIntervalMinutes: 360,
+};
+
+export async function loadNotificationPrefs(): Promise<NotificationPreferences> {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(NOTIF_PREFS_KEY, (result) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ...DEFAULT_NOTIFICATION_PREFS });
+        return;
+      }
+      const stored = result[NOTIF_PREFS_KEY] as Partial<NotificationPreferences> | undefined;
+      resolve({ ...DEFAULT_NOTIFICATION_PREFS, ...stored });
+    });
+  });
+}
+
+export async function saveNotificationPrefs(prefs: NotificationPreferences): Promise<void> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.sync.set({ [NOTIF_PREFS_KEY]: prefs }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
 }

@@ -1,7 +1,7 @@
 import type { Product } from "../../types";
 import { buildCccUrl } from "../../util/url";
 import { trustBrand, blockBrand } from "../../util/storage";
-import { addToWatchlist, isWatched } from "../../watchlist/storage";
+import { addToWatchlist, isWatched, removeFromWatchlist } from "../../watchlist/storage";
 import { loadShortlists, addToShortlist, createShortlist, isInAnyShortlist } from "../../shortlist/storage";
 import type { ShortlistItem } from "../../shortlist/storage";
 import { addToCompare, isInCompare, removeFromCompare } from "../../compare/storage";
@@ -87,6 +87,7 @@ export function injectCardActions(
       if (watched) {
         watchBtn.textContent = "👁️ Watching";
         watchBtn.style.background = "#e7f4f7";
+        watchBtn.title = "Click to stop watching this product";
       }
     }).catch(() => { /* ignore */ });
 
@@ -94,19 +95,28 @@ export function injectCardActions(
       e.preventDefault();
       e.stopPropagation();
       try {
-        // Default target: 10% below current price
-        const target = Math.round(product.price! * 0.9 * 100) / 100;
-        await addToWatchlist(
-          asin,
-          product.title,
-          product.price!,
-          target,
-          window.location.hostname,
-        );
-        watchBtn.textContent = "👁️ Watching!";
-        watchBtn.style.background = "#e7f4f7";
+        const alreadyWatched = await isWatched(asin);
+        if (alreadyWatched) {
+          await removeFromWatchlist(asin);
+          watchBtn.textContent = "👁️ Watch Price";
+          watchBtn.style.background = "#fff";
+          watchBtn.title = "Get notified when the price drops";
+        } else {
+          // Default target: 10% below current price
+          const target = Math.round(product.price! * 0.9 * 100) / 100;
+          await addToWatchlist(
+            asin,
+            product.title,
+            product.price!,
+            target,
+            window.location.hostname,
+          );
+          watchBtn.textContent = "👁️ Watching!";
+          watchBtn.style.background = "#e7f4f7";
+          watchBtn.title = "Click to stop watching this product";
+        }
       } catch (err) {
-        console.warn("[BAS] Failed to add to watchlist:", err);
+        console.warn("[BAS] Failed to toggle watchlist:", err);
         watchBtn.textContent = "⚠ Couldn't save";
       }
     });

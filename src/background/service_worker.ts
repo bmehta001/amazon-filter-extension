@@ -1,5 +1,6 @@
 import { refreshAllowlistFromRemote } from "../brand/allowlist";
 import { checkWatchlistPrices, WATCHLIST_ALARM_NAME, WATCHLIST_CHECK_INTERVAL_MINUTES } from "../watchlist/checker";
+import { loadNotificationPrefs } from "../watchlist/storage";
 import { markWelcomeSeen } from "../onboarding/state";
 
 const ALARM_NAME = "refreshBrandAllowlist";
@@ -96,5 +97,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .then((recalls) => sendResponse({ recalls }))
       .catch((err) => sendResponse({ error: err.message, recalls: [] }));
     return true;
+  }
+
+  if (message.type === "updateWatchlistAlarm") {
+    const minutes = message.intervalMinutes as number;
+    chrome.alarms.create(WATCHLIST_ALARM_NAME, {
+      delayInMinutes: minutes,
+      periodInMinutes: minutes,
+    }).then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false }));
+    return true;
+  }
+});
+
+// ── Notification Click Handler ───────────────────────────────────────
+
+chrome.notifications.onClicked.addListener((notificationId) => {
+  // Price drop notifications have the format: bas-price-drop-{ASIN}
+  const match = notificationId.match(/^bas-price-drop-(.+)$/);
+  if (match) {
+    const asin = match[1];
+    const url = `https://www.amazon.com/dp/${asin}`;
+    chrome.tabs.create({ url });
+    chrome.notifications.clear(notificationId);
   }
 });

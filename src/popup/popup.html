@@ -116,6 +116,60 @@
       </div>
     </section>
 
+    <!-- Notification Settings -->
+    <section class="section" id="notification-prefs">
+      <h2 class="section-title">🔕 Notification Settings</h2>
+      <label class="toggle-row">
+        <span class="toggle-label">
+          <span class="toggle-icon">🔔</span> Price Drop Alerts
+        </span>
+        <input type="checkbox" id="notif-enabled" class="toggle-input" />
+        <span class="toggle-slider"></span>
+      </label>
+      <div class="select-row">
+        <span class="select-label">
+          <span class="toggle-icon">🕐</span> Check Frequency
+        </span>
+        <select id="notif-frequency" class="select-input">
+          <option value="60">Every hour</option>
+          <option value="180">Every 3 hours</option>
+          <option value="360">Every 6 hours</option>
+          <option value="720">Every 12 hours</option>
+          <option value="1440">Once a day</option>
+        </select>
+      </div>
+      <div class="select-row">
+        <span class="select-label">
+          <span class="toggle-icon">🌙</span> Quiet Hours Start
+        </span>
+        <select id="notif-quiet-start" class="select-input">
+          <option value="0">12 AM</option>
+          <option value="1">1 AM</option>
+          <option value="2">2 AM</option>
+          <option value="6">6 AM</option>
+          <option value="8">8 AM</option>
+          <option value="20">8 PM</option>
+          <option value="21">9 PM</option>
+          <option value="22">10 PM</option>
+          <option value="23">11 PM</option>
+        </select>
+      </div>
+      <div class="select-row">
+        <span class="select-label">
+          <span class="toggle-icon">☀️</span> Quiet Hours End
+        </span>
+        <select id="notif-quiet-end" class="select-input">
+          <option value="5">5 AM</option>
+          <option value="6">6 AM</option>
+          <option value="7">7 AM</option>
+          <option value="8">8 AM</option>
+          <option value="9">9 AM</option>
+          <option value="10">10 AM</option>
+          <option value="12">12 PM</option>
+        </select>
+      </div>
+    </section>
+
     <!-- Product Shortlists -->
     <section class="section">
       <h2 class="section-title">📌 Product Shortlists</h2>
