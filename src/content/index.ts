@@ -54,6 +54,9 @@ import { renderCompareTray, destroyCompareTray } from "./ui/compareTray";
 import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPanel";
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { injectReviewGallery, REVIEW_GALLERY_STYLES } from "./ui/reviewGallery";
+import { injectListingQualityBadge, LISTING_QUALITY_STYLES } from "./ui/listingQualityBadge";
+import { analyzeListingCompleteness } from "../listing/completeness";
+import type { ListingCompleteness } from "../listing/completeness";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
 import { computeSavingsStack, injectSavingsBadge, injectMultiBuyBadge, removeMultiBuyBadge, SAVINGS_BADGE_STYLES, MULTI_BUY_BADGE_STYLES } from "./ui/savingsBadge";
 import { fetchRecallsViaServiceWorker, matchProductToRecalls, extractSearchQuery, clearRecallCache } from "../recall/checker";
@@ -87,6 +90,7 @@ ${ADVANCED_SEARCH_STYLES}
 ${SAVINGS_BADGE_STYLES}
 ${MULTI_BUY_BADGE_STYLES}
 ${REVIEW_GALLERY_STYLES}
+${LISTING_QUALITY_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -163,6 +167,8 @@ const multiBuyMap = new Map<string, MultiBuyOffer>();
 const bsrMap = new Map<string, BsrInfo>();
 /** Map ASIN → ReviewMediaGallery from customer reviews. */
 const reviewMediaMap = new Map<string, ReviewMediaGallery>();
+/** Map ASIN → ListingCompleteness from detail page analysis. */
+const listingCompletenessMap = new Map<string, ListingCompleteness>();
 /** Last set of visible products (for export). */
 let lastVisibleProducts: Product[] = [];
 /** Global preferences loaded from popup settings. */
@@ -178,7 +184,7 @@ function gatherEnrichmentMaps() {
     reviewScoreMap, productInsightsMap, reviewDataMap, brandMap,
     sellerMap, originMap, trustScoreMap, sellerTrustMap,
     listingIntegrityMap, dealScoreExportMap, reviewSummaryMap, multiBuyMap, bsrMap,
-    reviewMediaMap,
+    reviewMediaMap, listingCompletenessMap,
   };
 }
 
@@ -199,6 +205,7 @@ function mergeFromCache(): void {
   for (const [k, v] of cached.multiBuyMap) if (!multiBuyMap.has(k)) multiBuyMap.set(k, v);
   for (const [k, v] of cached.bsrMap) if (!bsrMap.has(k)) bsrMap.set(k, v);
   for (const [k, v] of cached.reviewMediaMap) if (!reviewMediaMap.has(k)) reviewMediaMap.set(k, v);
+  for (const [k, v] of cached.listingCompletenessMap) if (!listingCompletenessMap.has(k)) listingCompletenessMap.set(k, v);
 }
 
 /**
@@ -426,6 +433,7 @@ function watchForSoftNavigation(): void {
       multiBuyMap.clear();
       bsrMap.clear();
       reviewMediaMap.clear();
+      listingCompletenessMap.clear();
       reviewScoreMap.clear();
       productInsightsMap.clear();
       reviewDataMap.clear();
@@ -1200,6 +1208,9 @@ function queueDetailEnrichment(products: Product[]): void {
       }
       injectConfidenceBadgeForProduct(asin, product.element);
     }
+    if (listingCompletenessMap.has(asin)) {
+      injectListingQualityBadge(product.element, listingCompletenessMap.get(asin)!);
+    }
     if (product.brandCertain && product.seller) continue;
 
     // Async: check cache, then fetch if needed
@@ -1215,7 +1226,7 @@ function queueDetailEnrichment(products: Product[]): void {
 
         // If we still need brand or seller, fetch the detail page
         if ((!brand && !product.brandCertain) || !product.seller) {
-          const details = await fetchDetails.fetch(asin);
+          const details = await fetchDetails.fetch(asin, currentWeightProfile?.departmentId);
 
           if (!brand && details.brand) {
             brand = details.brand;
@@ -1242,6 +1253,11 @@ function queueDetailEnrichment(products: Product[]): void {
           if (details.bsr) {
             bsrMap.set(asin, details.bsr);
             product.bsr = details.bsr;
+          }
+
+          if (details.listingCompleteness) {
+            listingCompletenessMap.set(asin, details.listingCompleteness);
+            injectListingQualityBadge(product.element, details.listingCompleteness);
           }
         }
 

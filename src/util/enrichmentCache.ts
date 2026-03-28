@@ -7,6 +7,7 @@
  */
 
 import type { ReviewScore, ProductInsights, ProductReviewData, ReviewMediaGallery } from "../review/types";
+import type { ListingCompleteness } from "../listing/completeness";
 import type { TrustScoreResult } from "../review/trustScore";
 import type { SellerTrustResult } from "../seller/trust";
 import type { ListingIntegrityResult } from "../seller/listingSignals";
@@ -40,6 +41,7 @@ const MAP_KEYS = [
   "multiBuyMap",
   "bsrMap",
   "reviewMediaMap",
+  "listingCompletenessMap",
 ] as const;
 
 type MapKey = (typeof MAP_KEYS)[number];
@@ -112,6 +114,7 @@ export interface EnrichmentCacheMaps {
   multiBuyMap: Map<string, MultiBuyOffer>;
   bsrMap: Map<string, BsrInfo>;
   reviewMediaMap: Map<string, ReviewMediaGallery>;
+  listingCompletenessMap: Map<string, ListingCompleteness>;
 }
 
 /** Bulk save all enrichment maps to sessionStorage. */
@@ -130,6 +133,7 @@ export function saveAllEnrichment(maps: EnrichmentCacheMaps): void {
   saveMapToCache("multiBuyMap", maps.multiBuyMap);
   saveMapToCache("bsrMap", maps.bsrMap);
   saveMapToCache("reviewMediaMap", maps.reviewMediaMap);
+  saveMapToCache("listingCompletenessMap", maps.listingCompletenessMap);
 }
 
 /** Bulk load all enrichment maps from sessionStorage. */
@@ -149,6 +153,7 @@ export function restoreAllEnrichment(): EnrichmentCacheMaps {
     multiBuyMap: loadMapFromCache<MultiBuyOffer>("multiBuyMap"),
     bsrMap: loadMapFromCache<BsrInfo>("bsrMap"),
     reviewMediaMap: loadMapFromCache<ReviewMediaGallery>("reviewMediaMap"),
+    listingCompletenessMap: loadMapFromCache<ListingCompleteness>("listingCompletenessMap"),
   };
 }
 

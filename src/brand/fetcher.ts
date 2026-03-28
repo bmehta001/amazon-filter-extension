@@ -4,6 +4,8 @@
  */
 
 import type { SellerInfo, FulfillmentType, MultiBuyOffer, BsrInfo } from "../types";
+import { analyzeListingCompleteness } from "../listing/completeness";
+import type { ListingCompleteness } from "../listing/completeness";
 
 const TAG = "[BAS]";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -21,12 +23,14 @@ export interface ProductDetailResult {
   multiBuyOffer: MultiBuyOffer | null;
   /** Best Sellers Rank in top-level category. */
   bsr: BsrInfo | null;
+  /** Listing completeness analysis result. */
+  listingCompleteness: ListingCompleteness | null;
 }
 
 /**
  * Fetch the product detail page and extract brand + seller info.
  */
-export async function fetchProductDetails(asin: string): Promise<ProductDetailResult> {
+export async function fetchProductDetails(asin: string, departmentId?: string | null): Promise<ProductDetailResult> {
   try {
     const url = `https://${window.location.hostname}/dp/${asin}`;
     const controller = new AbortController();
@@ -40,7 +44,7 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
 
     if (!response.ok) {
       console.warn(TAG, `Detail fetch failed for ${asin}: HTTP ${response.status}`);
-      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null };
+      return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null, listingCompleteness: null };
     }
 
     const html = await response.text();
@@ -61,10 +65,11 @@ export async function fetchProductDetails(asin: string): Promise<ProductDetailRe
       otherSellersMinPrice: otherSellers.minPrice,
       multiBuyOffer: extractMultiBuyOffer(doc),
       bsr: extractBsr(doc),
+      listingCompleteness: analyzeListingCompleteness(doc, departmentId ?? null),
     };
   } catch (err) {
     console.warn(TAG, `Error fetching details for ${asin}:`, err);
-    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null };
+    return { brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null, listingCompleteness: null };
   }
 }
 
@@ -546,7 +551,7 @@ function isAmazonSeller(name: string): boolean {
  */
 /** Rate-limited fetcher with idle detection. */
 export interface RateLimitedDetailFetcher {
-  fetch: (asin: string) => Promise<ProductDetailResult>;
+  fetch: (asin: string, departmentId?: string | null) => Promise<ProductDetailResult>;
   isIdle: () => boolean;
 }
 
@@ -555,7 +560,7 @@ export function createRateLimitedDetailFetcher(
   delayMs = 500,
 ): RateLimitedDetailFetcher {
   let active = 0;
-  const queue: Array<{ asin: string; resolve: (v: ProductDetailResult) => void }> = [];
+  const queue: Array<{ asin: string; departmentId?: string | null; resolve: (v: ProductDetailResult) => void }> = [];
 
   async function processNext(): Promise<void> {
     if (active >= maxConcurrent || queue.length === 0) return;
@@ -564,10 +569,10 @@ export function createRateLimitedDetailFetcher(
     active++;
 
     try {
-      const result = await fetchProductDetails(item.asin);
+      const result = await fetchProductDetails(item.asin, item.departmentId);
       item.resolve(result);
     } catch {
-      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null });
+      item.resolve({ brand: null, seller: null, countryOfOrigin: null, otherSellersCount: 0, otherSellersMinPrice: null, multiBuyOffer: null, bsr: null, listingCompleteness: null });
     } finally {
       active--;
       if (queue.length > 0) {
@@ -578,9 +583,9 @@ export function createRateLimitedDetailFetcher(
   }
 
   return {
-    fetch: (asin: string): Promise<ProductDetailResult> => {
+    fetch: (asin: string, departmentId?: string | null): Promise<ProductDetailResult> => {
       return new Promise((resolve) => {
-        queue.push({ asin, resolve });
+        queue.push({ asin, departmentId, resolve });
         void processNext();
       });
     },

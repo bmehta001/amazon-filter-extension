@@ -114,6 +114,7 @@ describe("enrichmentCache", () => {
         multiBuyMap: new Map([["A1", { text: "Buy 2, save 10%", minQuantity: 2 }]]),
         bsrMap: new Map([["A1", { rank: 247, category: "Electronics" }]]),
         reviewMediaMap: new Map([["A1", { items: [{ url: "https://img.com/full.jpg", thumbnailUrl: "https://img.com/thumb.jpg", type: "image" as const, reviewRating: 5, verified: true }], reviewsWithMedia: 1 }]]),
+        listingCompletenessMap: new Map([["A1", { score: 75, label: "good" as const, color: "gray" as const, fields: [], department: null, presentCount: 8, totalCount: 12, missingImportantCount: 2 }]]),
       };
 
       saveAllEnrichment(maps);
@@ -137,6 +138,7 @@ describe("enrichmentCache", () => {
       expect(restored.bsrMap.get("A1")?.category).toBe("Electronics");
       expect(restored.reviewMediaMap.get("A1")?.items.length).toBe(1);
       expect(restored.reviewMediaMap.get("A1")?.items[0].verified).toBe(true);
+      expect(restored.listingCompletenessMap.get("A1")?.score).toBe(75);
     });
 
     it("returns empty maps when nothing is cached", () => {
