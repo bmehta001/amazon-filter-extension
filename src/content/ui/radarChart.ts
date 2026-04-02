@@ -31,8 +31,8 @@ export const RADAR_CHART_STYLES = `
   pointer-events: none;
 }
 
-.bas-radar-label-positive { fill: #28a745; }
-.bas-radar-label-negative { fill: #dc3545; }
+.bas-radar-label-positive { fill: #067d62; }
+.bas-radar-label-negative { fill: #cc0c39; }
 .bas-radar-label-mixed { fill: #856404; }
 `;
 
@@ -156,9 +156,9 @@ export function buildRadarChart(topicScores: TopicScore[]): HTMLElement {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 4.0) return "#28a745";
-  if (score >= 3.0) return "#ffc107";
-  return "#dc3545";
+  if (score >= 4.0) return "#067d62";
+  if (score >= 3.0) return "#b06000";
+  return "#cc0c39";
 }
 
 function truncateLabel(label: string, maxLen: number): string {

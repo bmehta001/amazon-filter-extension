@@ -233,7 +233,19 @@ function openAdvancedSearch(): void {
   // Create panel
   panelElement = document.createElement("div");
   panelElement.className = "bas-adv-panel bas-adv-panel--open";
+  panelElement.setAttribute("role", "dialog");
+  panelElement.setAttribute("aria-modal", "true");
+  panelElement.setAttribute("aria-label", "Advanced Search Builder");
   panelElement.addEventListener("click", (e) => e.stopPropagation());
+
+  // Escape key to close
+  const advKeyHandler = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      closeAdvancedSearch();
+      document.removeEventListener("keydown", advKeyHandler);
+    }
+  };
+  document.addEventListener("keydown", advKeyHandler);
 
   const title = document.createElement("h3");
   title.textContent = "🔧 Advanced Search Builder";

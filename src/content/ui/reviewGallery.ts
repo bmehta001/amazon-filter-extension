@@ -385,26 +385,32 @@ function openLightbox(items: ReviewMedia[], startIndex: number): void {
 
   const overlay = document.createElement("div");
   overlay.className = LIGHTBOX_CLASS;
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Review image gallery");
 
   // Close button
   const closeBtn = document.createElement("button");
   closeBtn.className = "bas-lightbox-close";
   closeBtn.textContent = "✕";
-  closeBtn.addEventListener("click", () => overlay.remove());
+  closeBtn.setAttribute("aria-label", "Close gallery");
+  closeBtn.addEventListener("click", () => closeLightbox(overlay, keyHandler));
 
   // Close on background click
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) overlay.remove();
+    if (e.target === overlay) closeLightbox(overlay, keyHandler);
   });
 
   // Navigation
   const prevBtn = document.createElement("button");
   prevBtn.className = "bas-lightbox-nav bas-lightbox-prev";
   prevBtn.textContent = "‹";
+  prevBtn.setAttribute("aria-label", "Previous image");
 
   const nextBtn = document.createElement("button");
   nextBtn.className = "bas-lightbox-nav bas-lightbox-next";
   nextBtn.textContent = "›";
+  nextBtn.setAttribute("aria-label", "Next image");
 
   // Main image/video container
   const mainContainer = document.createElement("div");
@@ -476,9 +482,23 @@ function openLightbox(items: ReviewMedia[], startIndex: number): void {
 
   // Keyboard navigation
   const keyHandler = (e: KeyboardEvent) => {
-    if (e.key === "Escape") overlay.remove();
+    if (e.key === "Escape") closeLightbox(overlay, keyHandler);
     if (e.key === "ArrowLeft" && currentIndex > 0) { currentIndex--; renderCurrent(); }
     if (e.key === "ArrowRight" && currentIndex < items.length - 1) { currentIndex++; renderCurrent(); }
+    // Focus trap — prevent Tab from leaving the lightbox
+    if (e.key === "Tab") {
+      const focusable = overlay.querySelectorAll<HTMLElement>("button, [tabindex]");
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
   };
   document.addEventListener("keydown", keyHandler);
 
@@ -500,4 +520,13 @@ function openLightbox(items: ReviewMedia[], startIndex: number): void {
 
   renderCurrent();
   document.body.appendChild(overlay);
+
+  // Focus the close button so keyboard users start inside the lightbox
+  closeBtn.focus();
+}
+
+/** Close lightbox and clean up listeners. */
+function closeLightbox(overlay: HTMLElement, keyHandler: (e: KeyboardEvent) => void): void {
+  document.removeEventListener("keydown", keyHandler);
+  overlay.remove();
 }

@@ -10,178 +10,191 @@
   <div class="popup">
     <header class="popup-header">
       <h1>🔍 Better Amazon Search</h1>
-      <p class="popup-subtitle">Extension Settings</p>
     </header>
 
-    <!-- Bandwidth Mode Quick Toggle -->
-    <section class="section">
-      <h2 class="section-title">⚡ Bandwidth Mode</h2>
-      <p class="section-desc">One click to adjust all data-fetching features</p>
-      <div class="preset-group" id="preset-group">
-        <button class="preset-btn" data-preset="low" title="Minimal data usage — disables price trend charts, review badges, and detail preloading">
-          <span class="preset-icon">🔋</span>
-          <span class="preset-label">Low</span>
-        </button>
-        <button class="preset-btn" data-preset="balanced" title="Sensible defaults — price trend charts and badges on, ML off">
-          <span class="preset-icon">⚖️</span>
-          <span class="preset-label">Balanced</span>
-        </button>
-        <button class="preset-btn" data-preset="high" title="All features enabled including ML analysis">
-          <span class="preset-icon">🚀</span>
-          <span class="preset-label">High</span>
-        </button>
-      </div>
-    </section>
+    <!-- Tab Bar -->
+    <nav class="popup-tabs" role="tablist">
+      <button class="popup-tab active" data-tab="settings" role="tab" aria-selected="true" aria-controls="tab-settings">⚙️ Settings</button>
+      <button class="popup-tab" data-tab="watchlist" role="tab" aria-selected="false" aria-controls="tab-watchlist">👁️ Watchlist</button>
+      <button class="popup-tab" data-tab="lists" role="tab" aria-selected="false" aria-controls="tab-lists">📌 Lists</button>
+    </nav>
 
-    <!-- Data Features -->
-    <section class="section">
-      <h2 class="section-title">📊 Data Features</h2>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">📈</span> Price Trend Charts
-        </span>
-        <input type="checkbox" id="pref-sparklines" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">🛡️</span> Review Trust Badges
-        </span>
-        <input type="checkbox" id="pref-review-badges" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">🏷️</span> Deal Score Badges
-        </span>
-        <input type="checkbox" id="pref-deal-badges" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">📦</span> Pre-load Product Details
-        </span>
-        <input type="checkbox" id="pref-preload" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">🤖</span> ML Review Analysis
-        </span>
-        <input type="checkbox" id="pref-ml" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-    </section>
+    <!-- Settings Tab -->
+    <div class="popup-tab-content active" id="tab-settings" role="tabpanel">
+      <!-- Bandwidth Mode Quick Toggle -->
+      <section class="section">
+        <h2 class="section-title">⚡ Bandwidth Mode</h2>
+        <p class="section-desc">One click to adjust all data-fetching features</p>
+        <div class="preset-group" id="preset-group">
+          <button class="preset-btn" data-preset="low" title="Minimal data usage — disables price trend charts, review badges, and detail preloading">
+            <span class="preset-icon">🔋</span>
+            <span class="preset-label">Low</span>
+          </button>
+          <button class="preset-btn" data-preset="balanced" title="Sensible defaults — price trend charts and badges on, ML off">
+            <span class="preset-icon">⚖️</span>
+            <span class="preset-label">Balanced</span>
+          </button>
+          <button class="preset-btn" data-preset="high" title="All features enabled including ML analysis">
+            <span class="preset-icon">🚀</span>
+            <span class="preset-label">High</span>
+          </button>
+        </div>
+      </section>
 
-    <!-- Default Filters -->
-    <section class="section">
-      <h2 class="section-title">🎯 Default Filters</h2>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">🚫</span> Hide Sponsored
-        </span>
-        <input type="checkbox" id="pref-hide-sponsored" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <div class="select-row">
-        <span class="select-label">
-          <span class="toggle-icon">🏷️</span> Brand Mode
-        </span>
-        <select id="pref-brand-mode" class="select-input">
-          <option value="off">Off</option>
-          <option value="dim">Fade Unverified</option>
-          <option value="hide">Hide Unverified</option>
-          <option value="trusted-only">Trusted Brands Only</option>
-        </select>
-      </div>
-      <div class="select-row">
-        <span class="select-label">
-          <span class="toggle-icon">🏪</span> Seller Filter
-        </span>
-        <select id="pref-seller-filter" class="select-input">
-          <option value="any">Any Seller</option>
-          <option value="amazon">Amazon Only</option>
-          <option value="fba">Fulfilled by Amazon</option>
-          <option value="third-party">Third-Party Only</option>
-        </select>
-      </div>
-    </section>
+      <!-- Data Features -->
+      <section class="section">
+        <h2 class="section-title">📊 Data Features</h2>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">📈</span> Price Trend Charts
+          </span>
+          <input type="checkbox" id="pref-sparklines" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">🛡️</span> Review Trust Badges
+          </span>
+          <input type="checkbox" id="pref-review-badges" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">🏷️</span> Deal Score Badges
+          </span>
+          <input type="checkbox" id="pref-deal-badges" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">📦</span> Pre-load Product Details
+          </span>
+          <input type="checkbox" id="pref-preload" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">🤖</span> ML Review Analysis
+          </span>
+          <input type="checkbox" id="pref-ml" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+      </section>
 
-    <!-- Price Watchlist -->
-    <section class="section">
-      <h2 class="section-title">🔔 Price Watchlist</h2>
-      <div id="watchlist-container">
-        <p class="section-desc" id="watchlist-empty">No items being watched. Use the 👁️ button on search results to watch prices.</p>
-        <div id="watchlist-items"></div>
-      </div>
-    </section>
+      <!-- Default Filters -->
+      <section class="section">
+        <h2 class="section-title">🎯 Default Filters</h2>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">🚫</span> Hide Sponsored
+          </span>
+          <input type="checkbox" id="pref-hide-sponsored" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="select-row">
+          <span class="select-label">
+            <span class="toggle-icon">🏷️</span> Brand Mode
+          </span>
+          <select id="pref-brand-mode" class="select-input">
+            <option value="off">Off</option>
+            <option value="dim">Fade Unverified</option>
+            <option value="hide">Hide Unverified</option>
+            <option value="trusted-only">Trusted Brands Only</option>
+          </select>
+        </div>
+        <div class="select-row">
+          <span class="select-label">
+            <span class="toggle-icon">🏪</span> Seller Filter
+          </span>
+          <select id="pref-seller-filter" class="select-input">
+            <option value="any">Any Seller</option>
+            <option value="amazon">Amazon Only</option>
+            <option value="fba">Fulfilled by Amazon</option>
+            <option value="third-party">Third-Party Only</option>
+          </select>
+        </div>
+      </section>
+    </div>
 
-    <!-- Notification Settings -->
-    <section class="section" id="notification-prefs">
-      <h2 class="section-title">🔕 Notification Settings</h2>
-      <label class="toggle-row">
-        <span class="toggle-label">
-          <span class="toggle-icon">🔔</span> Price Drop Alerts
-        </span>
-        <input type="checkbox" id="notif-enabled" class="toggle-input" />
-        <span class="toggle-slider"></span>
-      </label>
-      <div class="select-row">
-        <span class="select-label">
-          <span class="toggle-icon">🕐</span> Check Frequency
-        </span>
-        <select id="notif-frequency" class="select-input">
-          <option value="60">Every hour</option>
-          <option value="180">Every 3 hours</option>
-          <option value="360">Every 6 hours</option>
-          <option value="720">Every 12 hours</option>
-          <option value="1440">Once a day</option>
-        </select>
-      </div>
-      <div class="select-row">
-        <span class="select-label">
-          <span class="toggle-icon">🌙</span> Quiet Hours Start
-        </span>
-        <select id="notif-quiet-start" class="select-input">
-          <option value="0">12 AM</option>
-          <option value="1">1 AM</option>
-          <option value="2">2 AM</option>
-          <option value="6">6 AM</option>
-          <option value="8">8 AM</option>
-          <option value="20">8 PM</option>
-          <option value="21">9 PM</option>
-          <option value="22">10 PM</option>
-          <option value="23">11 PM</option>
-        </select>
-      </div>
-      <div class="select-row">
-        <span class="select-label">
-          <span class="toggle-icon">☀️</span> Quiet Hours End
-        </span>
-        <select id="notif-quiet-end" class="select-input">
-          <option value="5">5 AM</option>
-          <option value="6">6 AM</option>
-          <option value="7">7 AM</option>
-          <option value="8">8 AM</option>
-          <option value="9">9 AM</option>
-          <option value="10">10 AM</option>
-          <option value="12">12 PM</option>
-        </select>
-      </div>
-    </section>
+    <!-- Watchlist Tab -->
+    <div class="popup-tab-content" id="tab-watchlist" role="tabpanel">
+      <section class="section">
+        <h2 class="section-title">🔔 Price Watchlist</h2>
+        <div id="watchlist-container">
+          <p class="section-desc" id="watchlist-empty">No items being watched. Use the 👁️ button on search results to watch prices.</p>
+          <div id="watchlist-items"></div>
+        </div>
+      </section>
 
-    <!-- Product Shortlists -->
-    <section class="section">
-      <h2 class="section-title">📌 Product Shortlists</h2>
-      <p class="section-desc" id="shortlists-empty">No shortlists yet. Use the 📌 Save button on search results to start collecting products.</p>
-      <div id="shortlists-container"></div>
-      <div class="shortlist-actions" id="shortlist-actions" style="display:none;">
-        <button class="shortlist-action-btn" id="shortlist-new-btn" title="Create a new empty shortlist">➕ New List</button>
-      </div>
-    </section>
+      <!-- Notification Settings (belongs with watchlist) -->
+      <section class="section" id="notification-prefs">
+        <h2 class="section-title">🔕 Notification Settings</h2>
+        <label class="toggle-row">
+          <span class="toggle-label">
+            <span class="toggle-icon">🔔</span> Price Drop Alerts
+          </span>
+          <input type="checkbox" id="notif-enabled" class="toggle-input" />
+          <span class="toggle-slider"></span>
+        </label>
+        <div class="select-row">
+          <span class="select-label">
+            <span class="toggle-icon">🕐</span> Check Frequency
+          </span>
+          <select id="notif-frequency" class="select-input">
+            <option value="60">Every hour</option>
+            <option value="180">Every 3 hours</option>
+            <option value="360">Every 6 hours</option>
+            <option value="720">Every 12 hours</option>
+            <option value="1440">Once a day</option>
+          </select>
+        </div>
+        <div class="select-row">
+          <span class="select-label">
+            <span class="toggle-icon">🌙</span> Quiet Hours Start
+          </span>
+          <select id="notif-quiet-start" class="select-input">
+            <option value="0">12 AM</option>
+            <option value="1">1 AM</option>
+            <option value="2">2 AM</option>
+            <option value="6">6 AM</option>
+            <option value="8">8 AM</option>
+            <option value="20">8 PM</option>
+            <option value="21">9 PM</option>
+            <option value="22">10 PM</option>
+            <option value="23">11 PM</option>
+          </select>
+        </div>
+        <div class="select-row">
+          <span class="select-label">
+            <span class="toggle-icon">☀️</span> Quiet Hours End
+          </span>
+          <select id="notif-quiet-end" class="select-input">
+            <option value="5">5 AM</option>
+            <option value="6">6 AM</option>
+            <option value="7">7 AM</option>
+            <option value="8">8 AM</option>
+            <option value="9">9 AM</option>
+            <option value="10">10 AM</option>
+            <option value="12">12 PM</option>
+          </select>
+        </div>
+      </section>
+    </div>
+
+    <!-- Lists Tab -->
+    <div class="popup-tab-content" id="tab-lists" role="tabpanel">
+      <section class="section">
+        <h2 class="section-title">📌 Product Shortlists</h2>
+        <p class="section-desc" id="shortlists-empty">No shortlists yet. Use the 📌 Save button on search results to start collecting products.</p>
+        <div id="shortlists-container"></div>
+        <div class="shortlist-actions" id="shortlist-actions" style="display:none;">
+          <button class="shortlist-action-btn" id="shortlist-new-btn" title="Create a new empty shortlist">➕ New List</button>
+        </div>
+      </section>
+    </div>
 
     <footer class="popup-footer">
-      <span class="save-status" id="save-status"></span>
+      <span class="save-status" id="save-status" aria-live="polite"></span>
     </footer>
   </div>
 

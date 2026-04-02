@@ -131,6 +131,21 @@ async function init(): Promise<void> {
   currentPrefs = await loadPreferences();
   renderPrefs(els, currentPrefs);
 
+  // Tab switching
+  const tabs = document.querySelectorAll<HTMLButtonElement>(".popup-tab");
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const targetId = `tab-${tab.dataset.tab}`;
+      // Deactivate all tabs and panels
+      tabs.forEach((t) => { t.classList.remove("active"); t.setAttribute("aria-selected", "false"); });
+      document.querySelectorAll(".popup-tab-content").forEach((p) => p.classList.remove("active"));
+      // Activate clicked tab and panel
+      tab.classList.add("active");
+      tab.setAttribute("aria-selected", "true");
+      document.getElementById(targetId)?.classList.add("active");
+    });
+  });
+
   // Preset button clicks
   els.presetBtns.forEach((btn) => {
     btn.addEventListener("click", async () => {

@@ -209,9 +209,9 @@ export const REVIEW_INSIGHTS_STYLES = `
 `;
 
 function getBarColor(avgRating: number): string {
-  if (avgRating >= 4.0) return "#28a745";
-  if (avgRating >= 3.0) return "#ffc107";
-  return "#dc3545";
+  if (avgRating >= 4.0) return "#067d62";
+  if (avgRating >= 3.0) return "#b06000";
+  return "#cc0c39";
 }
 
 function formatRating(rating: number): string {
@@ -293,8 +293,8 @@ function getTrendIcon(trend?: "rising" | "falling" | "stable"): string {
 }
 
 function getTrendColor(trend?: "rising" | "falling" | "stable"): string {
-  if (trend === "rising") return "#28a745";
-  if (trend === "falling") return "#dc3545";
+  if (trend === "rising") return "#067d62";
+  if (trend === "falling") return "#cc0c39";
   return "#888";
 }
 

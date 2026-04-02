@@ -11,13 +11,13 @@ export const RECALL_BADGE_STYLES = `
   align-items: center;
   gap: 4px;
   background: #fef2f2;
-  border: 1px solid #dc3545;
+  border: 1px solid #cc0c39;
   border-radius: 4px;
   padding: 3px 8px;
   margin: 4px 0;
   font-size: 12px;
   font-weight: bold;
-  color: #dc3545;
+  color: #cc0c39;
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -50,7 +50,7 @@ export const RECALL_BADGE_STYLES = `
 .bas-recall-detail-title {
   font-weight: bold;
   font-size: 12px;
-  color: #dc3545;
+  color: #cc0c39;
   margin-bottom: 6px;
 }
 
