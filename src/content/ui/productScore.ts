@@ -1,0 +1,402 @@
+/**
+ * Product Score Badge — unified composite indicator replacing the separate
+ * confidence, review, trust, seller, and listing quality badges.
+ *
+ * Shows colored dots + a summary label. Click expands a detail panel
+ * with all constituent scores and their breakdowns.
+ */
+
+import type { TrustScoreResult } from "../../review/trustScore";
+import type { SellerTrustResult } from "../../seller/trust";
+import type { ListingIntegrityResult } from "../../seller/listingSignals";
+import type { ReviewScore } from "../../review/types";
+import type { ListingCompleteness } from "../../listing/completeness";
+import type { DealScore } from "../dealScoring";
+import type { BsrInfo } from "../../types";
+import { COLORS, RADII, FONT, SPACE } from "./designTokens";
+
+const BADGE_CLASS = "bas-product-score";
+const PANEL_CLASS = "bas-product-score-panel";
+
+export interface ProductScoreInput {
+  reviewScore?: ReviewScore;
+  reviewTrust?: TrustScoreResult;
+  sellerTrust?: SellerTrustResult;
+  listingIntegrity?: ListingIntegrityResult;
+  listingCompleteness?: ListingCompleteness;
+  dealScore?: DealScore;
+  bsr?: BsrInfo;
+}
+
+export const PRODUCT_SCORE_STYLES = `
+.${BADGE_CLASS} {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: ${RADII.sm};
+  background: ${COLORS.surface0};
+  border: 1px solid ${COLORS.borderLight};
+  margin: 4px 0;
+  font-size: ${FONT.sm};
+  font-family: ${FONT.family};
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.${BADGE_CLASS}:hover {
+  background: ${COLORS.surface1};
+}
+.${BADGE_CLASS}-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.${BADGE_CLASS}-dot--green { background: ${COLORS.success}; }
+.${BADGE_CLASS}-dot--yellow { background: #e0a800; }
+.${BADGE_CLASS}-dot--orange { background: ${COLORS.warning}; }
+.${BADGE_CLASS}-dot--red { background: ${COLORS.danger}; }
+.${BADGE_CLASS}-dot--gray { background: #999; }
+.${BADGE_CLASS}-label {
+  font-weight: 600;
+  color: ${COLORS.textPrimary};
+}
+.${BADGE_CLASS}-caret {
+  font-size: 9px;
+  color: ${COLORS.textMuted};
+  transition: transform 0.2s;
+}
+.${BADGE_CLASS}-caret.open {
+  transform: rotate(180deg);
+}
+.${BADGE_CLASS}-bsr {
+  color: ${COLORS.textSecondary};
+  font-size: 10px;
+}
+.${BADGE_CLASS}-sep {
+  width: 1px;
+  height: 12px;
+  background: ${COLORS.borderLight};
+}
+
+/* Detail panel */
+.${PANEL_CLASS} {
+  display: none;
+  background: ${COLORS.surface2};
+  border: 1px solid ${COLORS.borderLight};
+  border-radius: ${RADII.md};
+  padding: ${SPACE[2]} ${SPACE[3]};
+  margin: ${SPACE[1]} 0;
+  font-family: ${FONT.family};
+  font-size: ${FONT.sm};
+  box-shadow: ${`0 2px 8px rgba(0,0,0,0.1)`};
+}
+.${PANEL_CLASS}.open {
+  display: block;
+}
+.${PANEL_CLASS}-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid ${COLORS.surface1};
+}
+.${PANEL_CLASS}-row:last-child {
+  border-bottom: none;
+}
+.${PANEL_CLASS}-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.${PANEL_CLASS}-row-label {
+  flex: 1;
+  color: ${COLORS.textPrimary};
+  font-weight: 500;
+}
+.${PANEL_CLASS}-row-value {
+  color: ${COLORS.textSecondary};
+  font-size: 10px;
+}
+.${PANEL_CLASS}-row-bar {
+  width: 50px;
+  height: 4px;
+  background: ${COLORS.surface1};
+  border-radius: 2px;
+  overflow: hidden;
+}
+.${PANEL_CLASS}-row-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+`;
+
+type DotColor = "green" | "yellow" | "orange" | "red" | "gray";
+
+interface ScoreRow {
+  icon: string;
+  label: string;
+  score: number;
+  maxScore: number;
+  color: DotColor;
+  detail: string;
+}
+
+/**
+ * Inject the unified Product Score badge onto a card.
+ */
+export function injectProductScore(card: HTMLElement, input: ProductScoreInput): void {
+  removeProductScore(card);
+
+  const rows = buildScoreRows(input);
+  if (rows.length === 0) return;
+
+  // Compute overall label from dot colors
+  const colors = rows.map((r) => r.color);
+  const overallLabel = getOverallLabel(colors);
+  const dots = rows.map((r) => r.color);
+
+  // Badge
+  const badge = document.createElement("div");
+  badge.className = BADGE_CLASS;
+
+  // Dots
+  for (const dotColor of dots) {
+    const dot = document.createElement("span");
+    dot.className = `${BADGE_CLASS}-dot ${BADGE_CLASS}-dot--${dotColor}`;
+    badge.appendChild(dot);
+  }
+
+  // Label
+  const label = document.createElement("span");
+  label.className = `${BADGE_CLASS}-label`;
+  label.textContent = overallLabel;
+  badge.appendChild(label);
+
+  // Caret
+  const caret = document.createElement("span");
+  caret.className = `${BADGE_CLASS}-caret`;
+  caret.textContent = "▾";
+  badge.appendChild(caret);
+
+  // BSR compact label
+  if (input.bsr) {
+    const sep = document.createElement("span");
+    sep.className = `${BADGE_CLASS}-sep`;
+    badge.appendChild(sep);
+    const bsrLabel = document.createElement("span");
+    bsrLabel.className = `${BADGE_CLASS}-bsr`;
+    bsrLabel.textContent = `#${input.bsr.rank.toLocaleString()}`;
+    bsrLabel.title = `BSR: #${input.bsr.rank.toLocaleString()} in ${input.bsr.category}`;
+    badge.appendChild(bsrLabel);
+  }
+
+  // Tooltip
+  const tooltipLines = rows.map((r) => `${r.icon} ${r.label}: ${r.score}/${r.maxScore} — ${r.detail}`);
+  if (input.bsr) {
+    tooltipLines.push(`📊 BSR: #${input.bsr.rank.toLocaleString()} in ${input.bsr.category}`);
+  }
+  badge.title = tooltipLines.join("\n");
+
+  // Detail panel
+  const panel = document.createElement("div");
+  panel.className = PANEL_CLASS;
+  panel.setAttribute("role", "region");
+  panel.setAttribute("aria-label", "Product score details");
+
+  for (const row of rows) {
+    panel.appendChild(createPanelRow(row));
+  }
+
+  if (input.bsr) {
+    const bsrRow = document.createElement("div");
+    bsrRow.className = `${PANEL_CLASS}-row`;
+    bsrRow.innerHTML = `
+      <span class="${PANEL_CLASS}-row-dot" style="background:${COLORS.info}"></span>
+      <span class="${PANEL_CLASS}-row-label">📊 Best Sellers Rank</span>
+      <span class="${PANEL_CLASS}-row-value">#${input.bsr.rank.toLocaleString()} in ${input.bsr.category}</span>
+    `;
+    panel.appendChild(bsrRow);
+  }
+
+  // Toggle panel on click
+  badge.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const isOpen = panel.classList.toggle("open");
+    caret.classList.toggle("open", isOpen);
+    badge.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  badge.setAttribute("role", "button");
+  badge.setAttribute("tabindex", "0");
+  badge.setAttribute("aria-expanded", "false");
+  badge.setAttribute("aria-label", `Product Score: ${overallLabel}. Click for details.`);
+
+  // Keyboard support
+  badge.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      badge.click();
+    }
+  });
+
+  // Insert near the top of the card
+  const anchor = card.querySelector("h2, .a-size-medium, .a-size-base-plus");
+  if (anchor?.parentElement) {
+    anchor.parentElement.insertBefore(badge, anchor.nextSibling);
+    badge.after(panel);
+  } else {
+    card.prepend(panel);
+    card.prepend(badge);
+  }
+}
+
+/** Remove the product score badge and panel from a card. */
+export function removeProductScore(card: HTMLElement): void {
+  card.querySelector(`.${BADGE_CLASS}`)?.remove();
+  card.querySelector(`.${PANEL_CLASS}`)?.remove();
+}
+
+function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
+  const rows: ScoreRow[] = [];
+
+  if (input.reviewTrust) {
+    const rt = input.reviewTrust;
+    rows.push({
+      icon: "🛡️",
+      label: "Review Trust",
+      score: rt.score,
+      maxScore: 100,
+      color: rt.color as DotColor,
+      detail: capitalize(rt.label),
+    });
+  }
+
+  if (input.reviewScore) {
+    const rs = input.reviewScore;
+    rows.push({
+      icon: "⭐",
+      label: "Review Quality",
+      score: rs.score,
+      maxScore: 100,
+      color: rs.label === "authentic" ? "green" : rs.label === "mixed" ? "yellow" : "red",
+      detail: capitalize(rs.label),
+    });
+  }
+
+  if (input.sellerTrust) {
+    const st = input.sellerTrust;
+    rows.push({
+      icon: "🏪",
+      label: "Seller Trust",
+      score: st.score,
+      maxScore: 100,
+      color: st.color as DotColor,
+      detail: capitalize(st.label),
+    });
+  }
+
+  if (input.listingIntegrity) {
+    const li = input.listingIntegrity;
+    rows.push({
+      icon: "📋",
+      label: "Listing Integrity",
+      score: li.score,
+      maxScore: 100,
+      color: li.color as DotColor,
+      detail: capitalize(li.label),
+    });
+  }
+
+  if (input.listingCompleteness) {
+    const lc = input.listingCompleteness;
+    if (lc.missingImportantCount > 0) {
+      rows.push({
+        icon: "📝",
+        label: "Listing Info",
+        score: lc.score,
+        maxScore: 100,
+        color: lc.color as DotColor,
+        detail: `${lc.missingImportantCount} key field${lc.missingImportantCount === 1 ? "" : "s"} missing`,
+      });
+    }
+  }
+
+  if (input.dealScore) {
+    const ds = input.dealScore;
+    const color: DotColor = ds.label === "Great Deal" ? "green"
+      : ds.label === "Good Deal" ? "yellow"
+      : ds.label === "Normal Price" ? "gray"
+      : "red";
+    rows.push({
+      icon: "💰",
+      label: "Deal Quality",
+      score: ds.score,
+      maxScore: 100,
+      color,
+      detail: ds.label,
+    });
+  }
+
+  return rows;
+}
+
+function getOverallLabel(colors: DotColor[]): string {
+  const reds = colors.filter((c) => c === "red").length;
+  const greens = colors.filter((c) => c === "green").length;
+  if (reds >= 2) return "Caution";
+  if (greens >= colors.length * 0.6) return "Strong";
+  if (greens >= 1 && reds === 0) return "Good";
+  if (reds >= 1) return "Mixed";
+  return "Fair";
+}
+
+function createPanelRow(row: ScoreRow): HTMLElement {
+  const el = document.createElement("div");
+  el.className = `${PANEL_CLASS}-row`;
+
+  const dot = document.createElement("span");
+  dot.className = `${PANEL_CLASS}-row-dot`;
+  dot.style.background = dotColorToHex(row.color);
+
+  const label = document.createElement("span");
+  label.className = `${PANEL_CLASS}-row-label`;
+  label.textContent = `${row.icon} ${row.label}`;
+
+  const bar = document.createElement("span");
+  bar.className = `${PANEL_CLASS}-row-bar`;
+  const fill = document.createElement("span");
+  fill.className = `${PANEL_CLASS}-row-bar-fill`;
+  fill.style.width = `${Math.min(100, row.score)}%`;
+  fill.style.background = dotColorToHex(row.color);
+  bar.appendChild(fill);
+
+  const value = document.createElement("span");
+  value.className = `${PANEL_CLASS}-row-value`;
+  value.textContent = `${row.score} — ${row.detail}`;
+
+  el.appendChild(dot);
+  el.appendChild(label);
+  el.appendChild(bar);
+  el.appendChild(value);
+  return el;
+}
+
+function dotColorToHex(color: DotColor): string {
+  switch (color) {
+    case "green": return COLORS.success;
+    case "yellow": return "#e0a800";
+    case "orange": return COLORS.warning;
+    case "red": return COLORS.danger;
+    case "gray": return "#999";
+  }
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

@@ -56,6 +56,12 @@ import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { injectReviewGallery, REVIEW_GALLERY_STYLES } from "./ui/reviewGallery";
 import { injectListingQualityBadge, LISTING_QUALITY_STYLES } from "./ui/listingQualityBadge";
 import { DESIGN_TOKEN_STYLES } from "./ui/designTokens";
+import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
+import type { ProductScoreInput } from "./ui/productScore";
+import { injectPriceIntel, PRICE_INTEL_STYLES } from "./ui/priceIntel";
+import type { PriceIntelInput } from "./ui/priceIntel";
+import { injectUnifiedReviews, UNIFIED_REVIEW_STYLES } from "./ui/unifiedReviews";
+import type { UnifiedReviewData } from "./ui/unifiedReviews";
 import { analyzeListingCompleteness } from "../listing/completeness";
 import type { ListingCompleteness } from "../listing/completeness";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
@@ -93,6 +99,9 @@ ${SAVINGS_BADGE_STYLES}
 ${MULTI_BUY_BADGE_STYLES}
 ${REVIEW_GALLERY_STYLES}
 ${LISTING_QUALITY_STYLES}
+${PRODUCT_SCORE_STYLES}
+${PRICE_INTEL_STYLES}
+${UNIFIED_REVIEW_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -1048,18 +1057,19 @@ function updateSponsoredVisibility(hide: boolean): void {
  * available trust dimensions. Called after any trust data becomes available.
  */
 function injectConfidenceBadgeForProduct(asin: string, card: HTMLElement): void {
-  const input: ConfidenceInput = {};
+  const input: ProductScoreInput = {};
+  if (reviewScoreMap.has(asin)) input.reviewScore = reviewScoreMap.get(asin);
   if (trustScoreMap.has(asin)) input.reviewTrust = trustScoreMap.get(asin);
   if (sellerTrustMap.has(asin)) input.sellerTrust = sellerTrustMap.get(asin);
   if (listingIntegrityMap.has(asin)) input.listingIntegrity = listingIntegrityMap.get(asin);
+  if (listingCompletenessMap.has(asin)) input.listingCompleteness = listingCompletenessMap.get(asin);
   if (bsrMap.has(asin)) input.bsr = bsrMap.get(asin);
-  // Deal score is computed synchronously during filtering, check the map
-  // (dealScoreMap only stores the numeric score, not the full object, so skip for now)
 
   // Only inject if we have at least 2 dimensions to show
-  const dimensions = [input.reviewTrust, input.sellerTrust, input.listingIntegrity].filter(Boolean).length;
+  const dimensions = [input.reviewTrust, input.sellerTrust, input.listingIntegrity, input.reviewScore].filter(Boolean).length;
   if (dimensions >= 2) {
-    injectConfidenceBadge(card, input);
+    removeProductScore(card);
+    injectProductScore(card, input);
   }
 }
 
@@ -1072,19 +1082,18 @@ function queueReviewAnalysis(products: Product[]): void {
     if (!product.asin) continue;
     const asin = product.asin;
 
-    // Skip if already scored this session
+    // Skip if already scored this session — inject from cache
     if (reviewScoreMap.has(asin)) {
-      const score = reviewScoreMap.get(asin)!;
-      injectReviewBadge(product.element, score);
-      if (trustScoreMap.has(asin)) {
-        injectTrustBadge(product.element, trustScoreMap.get(asin)!);
-      }
-      if (productInsightsMap.has(asin)) {
-        injectReviewInsights(product.element, productInsightsMap.get(asin)!, currentFilters.ignoredCategories);
-      }
-      if (reviewMediaMap.has(asin)) {
-        injectReviewGallery(product.element, reviewMediaMap.get(asin)!);
-      }
+      // Inject unified product score (replaces individual review/trust/seller/listing badges)
+      injectConfidenceBadgeForProduct(asin, product.element);
+
+      // Inject unified reviews section (replaces separate insights + summary + gallery)
+      const reviewData: UnifiedReviewData = {};
+      if (reviewSummaryMap.has(asin)) reviewData.summary = reviewSummaryMap.get(asin);
+      if (productInsightsMap.has(asin)) reviewData.insights = productInsightsMap.get(asin);
+      if (reviewMediaMap.has(asin)) reviewData.mediaGallery = reviewMediaMap.get(asin);
+      reviewData.ignoredCategories = currentFilters.ignoredCategories;
+      injectUnifiedReviews(product.element, reviewData);
       continue;
     }
 
@@ -1112,8 +1121,6 @@ function queueReviewAnalysis(products: Product[]): void {
 
         if (score) {
           reviewScoreMap.set(asin, score);
-          // Update the badge
-          injectReviewBadge(product.element, score);
           // Attach score to product and re-apply filter if quality threshold is set
           if (currentFilters.minReviewQuality > 0) {
             product.reviewQuality = score.score;
@@ -1122,28 +1129,25 @@ function queueReviewAnalysis(products: Product[]): void {
           }
         }
 
-        // Compute and inject category insights + trust score
+        // Compute category insights + trust score + summary
         if (reviewData && reviewData.reviews.length > 0) {
           reviewDataMap.set(asin, reviewData);
           const insights = getProductInsights(reviewData.reviews, currentFilters.ignoredCategories);
           productInsightsMap.set(asin, insights);
-          injectReviewInsights(product.element, insights, currentFilters.ignoredCategories);
           if (currentFilters.ignoredCategories.length > 0) {
             product.adjustedRating = insights.adjustedRating;
             const result = await applyFilters(product, currentFilters);
             applyFilterResult(product.element, result);
           }
 
-          // Compute and inject trust score
+          // Compute trust score
           const trustResult = computeTrustScore(reviewData, insights.categorizedReviews);
           trustScoreMap.set(asin, trustResult);
-          injectTrustBadge(product.element, trustResult);
 
-          // Update confidence badge with new review trust data
+          // Update unified product score badge
           injectConfidenceBadgeForProduct(asin, product.element);
 
-          // Inject review summary — prefer sentence-level topic scores, fall back to keyword scan
-          // Apply category weights if a department profile is active
+          // Compute review summary
           let topicScoresForSummary = insights.topicScores;
           let deptLabel: string | undefined;
           let weightedAgg: number | undefined;
@@ -1156,16 +1160,22 @@ function queueReviewAnalysis(products: Product[]): void {
             ? generateSummaryFromTopicScores(topicScoresForSummary, deptLabel, weightedAgg)
             : generateReviewSummary(reviewData.reviews);
           if (summary) {
-            const panelData: SummaryPanelData = { summary, insights };
-            injectSummaryPanel(product.element, panelData);
             reviewSummaryMap.set(asin, summary);
           }
 
-          // Inject review photo/video gallery
+          // Store media gallery
           if (reviewData.mediaGallery && reviewData.mediaGallery.items.length > 0) {
             reviewMediaMap.set(asin, reviewData.mediaGallery);
-            injectReviewGallery(product.element, reviewData.mediaGallery);
           }
+
+          // Inject unified reviews section (summary + insights + gallery combined)
+          const unifiedData: UnifiedReviewData = {
+            summary: summary ?? undefined,
+            insights,
+            mediaGallery: reviewData.mediaGallery,
+            ignoredCategories: currentFilters.ignoredCategories,
+          };
+          injectUnifiedReviews(product.element, unifiedData);
         }
       } catch (err) {
         console.warn("[BAS] Review analysis error:", err);
