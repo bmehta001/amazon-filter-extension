@@ -55,6 +55,7 @@ import { injectSummaryPanel, SUMMARY_PANEL_STYLES } from "./ui/reviewSummaryPane
 import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { injectReviewGallery, REVIEW_GALLERY_STYLES } from "./ui/reviewGallery";
 import { injectListingQualityBadge, LISTING_QUALITY_STYLES } from "./ui/listingQualityBadge";
+import { DESIGN_TOKEN_STYLES } from "./ui/designTokens";
 import { analyzeListingCompleteness } from "../listing/completeness";
 import type { ListingCompleteness } from "../listing/completeness";
 import { ADVANCED_SEARCH_STYLES, destroyAdvancedSearch } from "./ui/advancedSearch";
@@ -69,6 +70,7 @@ import type { ReviewScore, ProductInsights, ProductReviewData, ReviewMediaGaller
 const REVIEW_SUMMARY_STYLES = SUMMARY_PANEL_STYLES;
 
 const GLOBAL_STYLES = `
+${DESIGN_TOKEN_STYLES}
   .bas-hidden { display: none !important; }
   .bas-dimmed { opacity: 0.4; transition: opacity 0.2s; }
   .bas-dimmed:hover { opacity: 0.8; }
