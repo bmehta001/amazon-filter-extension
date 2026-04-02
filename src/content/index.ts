@@ -1,6 +1,6 @@
 import { saveAllEnrichment, restoreAllEnrichment } from "../util/enrichmentCache";
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged, loadPreferences, onPreferencesChanged } from "../util/storage";
-import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildAmazonOnlyUrl } from "../util/url";
+import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildAmazonOnlyUrl, buildCccUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
 import { initAllowlist, isAllowlisted } from "../brand/allowlist";
 import { createRateLimitedDetailFetcher } from "../brand/fetcher";
@@ -732,21 +732,34 @@ function renderFilterResults(
     if (currentPrefs.showDealBadges && result !== "hide") {
       const dealScore = computeDealScore(product);
       if (dealScore) {
-        injectDealBadge(product.element, dealScore);
         if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
       }
-    }
 
-    if (result !== "hide" && product.effectivePrice != null) {
-      const stack = computeSavingsStack(product);
-      if (stack && stack.layers.some(l => l.amount > 0)) {
-        injectSavingsBadge(product.element, stack);
-      } else if (product.multiBuyOffer) {
-        // No savings stack but has multi-buy — show standalone badge
-        injectMultiBuyBadge(product.element, product.multiBuyOffer.text);
+      // Build unified price intelligence line
+      const priceIntelInput: PriceIntelInput = {};
+      if (dealScore) priceIntelInput.dealScore = dealScore;
+
+      if (product.effectivePrice != null) {
+        const stack = computeSavingsStack(product);
+        if (stack && stack.layers.some(l => l.amount > 0)) {
+          priceIntelInput.savingsPercent = stack.totalPercent;
+          priceIntelInput.effectivePrice = stack.effectivePrice;
+          priceIntelInput.savingsTooltip = stack.layers
+            .filter(l => l.amount > 0)
+            .map(l => `${l.label}: -$${l.amount.toFixed(2)}`)
+            .join("\n");
+        }
       }
-    } else if (result !== "hide" && product.multiBuyOffer) {
-      injectMultiBuyBadge(product.element, product.multiBuyOffer.text);
+
+      if (product.multiBuyOffer) {
+        priceIntelInput.multiBuy = product.multiBuyOffer;
+      }
+
+      if (product.asin && currentPrefs.showSparklines) {
+        priceIntelInput.priceHistoryUrl = buildCccUrl(product.asin, product.title);
+      }
+
+      injectPriceIntel(product.element, priceIntelInput);
     }
 
     const reasons = buildFilterReasons(product, currentFilters);

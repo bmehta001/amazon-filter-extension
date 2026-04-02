@@ -133,6 +133,15 @@ export const PRODUCT_SCORE_STYLES = `
   height: 100%;
   border-radius: 2px;
 }
+.${PANEL_CLASS}-row-reasons {
+  padding-left: 16px;
+  font-size: 10px;
+  color: ${COLORS.textMuted};
+  line-height: 1.5;
+}
+.${PANEL_CLASS}-row-reason {
+  padding: 1px 0;
+}
 `;
 
 type DotColor = "green" | "yellow" | "orange" | "red" | "gray";
@@ -144,6 +153,8 @@ interface ScoreRow {
   maxScore: number;
   color: DotColor;
   detail: string;
+  /** Additional breakdown reasons (shown as sub-items in the panel). */
+  reasons?: string[];
 }
 
 /**
@@ -267,6 +278,12 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
 
   if (input.reviewTrust) {
     const rt = input.reviewTrust;
+    const reasons: string[] = [];
+    if (rt.signals) {
+      for (const s of rt.signals) {
+        reasons.push(`${s.severity === "high" ? "🚨" : "⚠️"} ${s.reason} (${s.deduction > 0 ? "-" : "+"}${Math.abs(s.deduction)})`);
+      }
+    }
     rows.push({
       icon: "🛡️",
       label: "Review Trust",
@@ -274,6 +291,7 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
       maxScore: 100,
       color: rt.color as DotColor,
       detail: capitalize(rt.label),
+      reasons: reasons.length > 0 ? reasons : undefined,
     });
   }
 
@@ -286,11 +304,16 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
       maxScore: 100,
       color: rs.label === "authentic" ? "green" : rs.label === "mixed" ? "yellow" : "red",
       detail: capitalize(rs.label),
+      reasons: rs.breakdown?.reasons?.length ? rs.breakdown.reasons : undefined,
     });
   }
 
   if (input.sellerTrust) {
     const st = input.sellerTrust;
+    const reasons: string[] = [];
+    if (st.signals) {
+      for (const s of st.signals) reasons.push(`${s.severity === "high" ? "🚨" : "⚠️"} ${s.reason}`);
+    }
     rows.push({
       icon: "🏪",
       label: "Seller Trust",
@@ -298,11 +321,16 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
       maxScore: 100,
       color: st.color as DotColor,
       detail: capitalize(st.label),
+      reasons: reasons.length > 0 ? reasons : undefined,
     });
   }
 
   if (input.listingIntegrity) {
     const li = input.listingIntegrity;
+    const reasons: string[] = [];
+    if (li.signals) {
+      for (const s of li.signals) reasons.push(`${s.points > 0 ? "✅" : "⚠️"} ${s.reason}`);
+    }
     rows.push({
       icon: "📋",
       label: "Listing Integrity",
@@ -310,6 +338,7 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
       maxScore: 100,
       color: li.color as DotColor,
       detail: capitalize(li.label),
+      reasons: reasons.length > 0 ? reasons : undefined,
     });
   }
 
@@ -357,6 +386,8 @@ function getOverallLabel(colors: DotColor[]): string {
 }
 
 function createPanelRow(row: ScoreRow): HTMLElement {
+  const wrapper = document.createElement("div");
+
   const el = document.createElement("div");
   el.className = `${PANEL_CLASS}-row`;
 
@@ -384,7 +415,22 @@ function createPanelRow(row: ScoreRow): HTMLElement {
   el.appendChild(label);
   el.appendChild(bar);
   el.appendChild(value);
-  return el;
+  wrapper.appendChild(el);
+
+  // Render breakdown reasons if available
+  if (row.reasons && row.reasons.length > 0) {
+    const reasonsEl = document.createElement("div");
+    reasonsEl.className = `${PANEL_CLASS}-row-reasons`;
+    for (const reason of row.reasons) {
+      const r = document.createElement("div");
+      r.className = `${PANEL_CLASS}-row-reason`;
+      r.textContent = reason;
+      reasonsEl.appendChild(r);
+    }
+    wrapper.appendChild(reasonsEl);
+  }
+
+  return wrapper;
 }
 
 function dotColorToHex(color: DotColor): string {
