@@ -254,6 +254,38 @@ body {
 }
 
 /* Watchlist */
+.insights-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.insight-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 6px;
+  background: #f0f8fa;
+  border: 1px solid #d5e8ec;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.insight-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #007185;
+  line-height: 1.2;
+}
+
+.insight-label {
+  font-size: 9px;
+  color: #565959;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+}
+
 .watchlist-item {
   display: flex;
   align-items: flex-start;

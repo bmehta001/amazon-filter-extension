@@ -1,6 +1,7 @@
 import { loadPreferences, savePreferences } from "../util/storage";
 import { loadWatchlist, removeFromWatchlist, updateTargetPrice, loadNotificationPrefs, saveNotificationPrefs } from "../watchlist/storage";
 import type { WatchlistItem, NotificationPreferences, PriceSnapshot } from "../watchlist/storage";
+import { getCurrentMonthInsights } from "../insights/dashboard";
 import {
   loadShortlists,
   createShortlist,
@@ -174,6 +175,9 @@ async function init(): Promise<void> {
   els.hideSponsored.addEventListener("change", onToggleChange);
   els.brandMode.addEventListener("change", onToggleChange);
   els.sellerFilter.addEventListener("change", onToggleChange);
+
+  // Render shopping insights
+  await renderInsights();
 
   // Render watchlist
   await renderWatchlist();
@@ -379,6 +383,25 @@ function downloadFile(filename: string, content: string, mimeType: string): void
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── Shopping Insights ──────────────────────────────────────────────────
+
+async function renderInsights(): Promise<void> {
+  try {
+    const insights = await getCurrentMonthInsights();
+    const analyzed = document.getElementById("insight-analyzed");
+    const suspicious = document.getElementById("insight-suspicious");
+    const savings = document.getElementById("insight-savings");
+    const drops = document.getElementById("insight-drops");
+
+    if (analyzed) analyzed.textContent = insights.productsAnalyzed.toLocaleString();
+    if (suspicious) suspicious.textContent = insights.suspiciousListingsFlagged.toLocaleString();
+    if (savings) savings.textContent = `$${insights.estimatedSavings.toFixed(0)}`;
+    if (drops) drops.textContent = insights.priceDropsCaught.toLocaleString();
+  } catch {
+    // Insights may not exist yet
+  }
 }
 
 async function renderWatchlist(): Promise<void> {

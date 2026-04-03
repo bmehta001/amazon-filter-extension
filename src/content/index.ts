@@ -59,7 +59,8 @@ import { DESIGN_TOKEN_STYLES } from "./ui/designTokens";
 import { UPGRADE_PROMPT_STYLES, injectProLockInPlace } from "./ui/upgradePrompt";
 import { loadLicense, onLicenseChanged } from "../licensing/license";
 import type { LicenseTier } from "../licensing/license";
-import { isFeatureAvailable } from "../licensing/featureGate";
+import { isFeatureAvailable, getFeatureTeaser } from "../licensing/featureGate";
+import { trackProductsAnalyzed, trackSuspiciousListing, trackInflatedPrice, trackSavings, trackSearchEnhanced, trackRecallDetected } from "../insights/dashboard";
 import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
 import type { ProductScoreInput } from "./ui/productScore";
 import { injectPriceIntel, PRICE_INTEL_STYLES } from "./ui/priceIntel";
@@ -606,6 +607,10 @@ async function filterAllProducts(): Promise<void> {
   if (filterBarHost) {
     updateProcessingState(filterBarHost, "done");
   }
+
+  // Track insights (non-blocking, fire-and-forget)
+  void trackSearchEnhanced();
+  void trackProductsAnalyzed(products.length);
 }
 
 /**
@@ -1122,6 +1127,9 @@ function queueReviewAnalysis(products: Product[]): void {
       // Inject unified product score (replaces individual review/trust/seller/listing badges)
       if (isFeatureAvailable("trust-scores", currentTier)) {
         injectConfidenceBadgeForProduct(asin, product.element);
+      } else if (trustScoreMap.has(asin)) {
+        // Free user: show teaser that trust data exists
+        injectProLockInPlace(product.element, "trust-scores");
       }
 
       // Inject unified reviews section (replaces separate insights + summary + gallery)

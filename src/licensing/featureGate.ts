@@ -80,6 +80,34 @@ export function isFeatureAvailable(feature: FeatureId, currentTier: LicenseTier)
 }
 
 /**
+ * Get a contextual teaser message for a locked feature.
+ * Used to show "Pro would have caught this" hints to free users.
+ */
+export function getFeatureTeaser(feature: FeatureId): string {
+  const teasers: Record<FeatureId, string> = {
+    "ml-review-analysis": "AI detected review patterns on this product",
+    "deal-scoring": "Deal analysis available for this product",
+    "trust-scores": "Trust analysis found signals on this product",
+    "seller-trust": "Seller trust data available",
+    "listing-integrity": "Listing integrity check complete",
+    "listing-completeness": "Listing quality audit available",
+    "compare-tray": "Compare products side-by-side",
+    "export": "Export your research to CSV/JSON",
+    "watchlist": "Track this price and get alerts",
+    "price-sparklines": "Price history trend available",
+    "bsr-extraction": "Best Sellers Rank data available",
+    "recall-safety": "Safety recall check available",
+    "advanced-search": "Advanced search filters available",
+    "review-detail-panel": "Detailed review breakdown available",
+    "category-weights": "Category-optimized scoring available",
+    "review-gallery": "Customer photos available",
+    "unlimited-shortlists": "Save to unlimited shortlists",
+    "savings-breakdown": "Detailed savings breakdown available",
+  };
+  return teasers[feature];
+}
+
+/**
  * Get all features available for a given tier.
  */
 export function getAvailableFeatures(tier: LicenseTier): FeatureId[] {
