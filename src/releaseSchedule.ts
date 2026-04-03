@@ -108,6 +108,7 @@ export function getReleasedFeatures(): string[] {
 
 /** Get features coming in the next wave (for "Coming Soon" UI). */
 export function getUpcomingFeatures(): string[] {
+  if (CURRENT_WAVE >= 8) return [];
   const nextWave = (CURRENT_WAVE + 1) as ReleaseWave;
   return Object.entries(WAVE_MAP)
     .filter(([, wave]) => wave === nextWave)

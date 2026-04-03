@@ -101,22 +101,31 @@ async function saveInsights(data: InsightsData): Promise<void> {
 
 // ── Tracking Functions ───────────────────────────────────────────────
 
+// Serialization queue to prevent read-modify-write race conditions
+let pendingOp: Promise<void> = Promise.resolve();
+function serialize(fn: () => Promise<void>): Promise<void> {
+  pendingOp = pendingOp.then(fn, fn);
+  return pendingOp;
+}
+
 /** Increment a counter for the current month and all-time. */
 async function increment(
   field: keyof Omit<MonthlyInsights, "month">,
   amount = 1,
 ): Promise<void> {
-  const data = await loadInsights();
-  const month = getCurrentMonth();
+  return serialize(async () => {
+    const data = await loadInsights();
+    const month = getCurrentMonth();
 
-  if (!data.months[month]) {
-    data.months[month] = createEmptyMonth(month);
-  }
+    if (!data.months[month]) {
+      data.months[month] = createEmptyMonth(month);
+    }
 
-  (data.months[month][field] as number) += amount;
-  (data.allTime[field] as number) += amount;
+    (data.months[month][field] as number) += amount;
+    (data.allTime[field] as number) += amount;
 
-  await saveInsights(data);
+    await saveInsights(data);
+  });
 }
 
 /** Record that products were analyzed on a search page. */

@@ -139,12 +139,10 @@ function createButton(text: string, tooltip: string): HTMLButtonElement {
     transition: background 0.15s;
   `;
   btn.addEventListener("mouseenter", () => {
-    btn.style.background = "#f7fafa";
+    if (!btn.dataset.state) btn.style.background = "#f7fafa";
   });
   btn.addEventListener("mouseleave", () => {
-    if (!btn.style.background.includes("e6f7e6") && !btn.style.background.includes("fde8e8")) {
-      btn.style.background = "#fff";
-    }
+    if (!btn.dataset.state) btn.style.background = "#fff";
   });
   return btn;
 }

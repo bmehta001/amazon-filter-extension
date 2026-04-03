@@ -246,7 +246,12 @@ async function main(): Promise<void> {
   ]);
   currentFilters = filters;
   currentPrefs = prefs;
-  currentTier = license.tier;
+  // Check expiration before caching tier — an expired pro license = free
+  if (license.tier === "pro" && !license.isLifetime && license.expiresAt) {
+    currentTier = Date.now() > new Date(license.expiresAt).getTime() ? "free" : "pro";
+  } else {
+    currentTier = license.tier;
+  }
 
   // Apply preference defaults to filters for new sessions
   if (currentPrefs.hideSponsoredDefault && !currentFilters.hideSponsored) {

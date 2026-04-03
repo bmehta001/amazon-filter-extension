@@ -314,9 +314,8 @@ export function injectProductScore(card: HTMLElement, input: ProductScoreInput):
   panel.setAttribute("role", "region");
   panel.setAttribute("aria-label", "Product score details");
 
-  // Red Flag Report verdict at top of panel
-  const redFlagReport = computeRedFlagReport(input);
-  panel.appendChild(buildVerdictSection(redFlagReport));
+  // Red Flag Report verdict at top of panel (reuse from badge label computation)
+  panel.appendChild(buildVerdictSection(report));
 
   for (const row of rows) {
     panel.appendChild(createPanelRow(row));
@@ -325,11 +324,18 @@ export function injectProductScore(card: HTMLElement, input: ProductScoreInput):
   if (input.bsr) {
     const bsrRow = document.createElement("div");
     bsrRow.className = `${PANEL_CLASS}-row`;
-    bsrRow.innerHTML = `
-      <span class="${PANEL_CLASS}-row-dot" style="background:${COLORS.info}"></span>
-      <span class="${PANEL_CLASS}-row-label">📊 Best Sellers Rank</span>
-      <span class="${PANEL_CLASS}-row-value">#${input.bsr.rank.toLocaleString()} in ${input.bsr.category}</span>
-    `;
+    const bsrDot = document.createElement("span");
+    bsrDot.className = `${PANEL_CLASS}-row-dot`;
+    bsrDot.style.background = COLORS.info;
+    const bsrLabel = document.createElement("span");
+    bsrLabel.className = `${PANEL_CLASS}-row-label`;
+    bsrLabel.textContent = "📊 Best Sellers Rank";
+    const bsrValue = document.createElement("span");
+    bsrValue.className = `${PANEL_CLASS}-row-value`;
+    bsrValue.textContent = `#${input.bsr.rank.toLocaleString()} in ${input.bsr.category}`;
+    bsrRow.appendChild(bsrDot);
+    bsrRow.appendChild(bsrLabel);
+    bsrRow.appendChild(bsrValue);
     panel.appendChild(bsrRow);
   }
 
@@ -562,16 +568,6 @@ function buildScoreRows(input: ProductScoreInput): ScoreRow[] {
   }
 
   return rows;
-}
-
-function getOverallLabel(colors: DotColor[]): string {
-  const reds = colors.filter((c) => c === "red").length;
-  const greens = colors.filter((c) => c === "green").length;
-  if (reds >= 2) return "Caution";
-  if (greens >= colors.length * 0.6) return "Strong";
-  if (greens >= 1 && reds === 0) return "Good";
-  if (reds >= 1) return "Mixed";
-  return "Fair";
 }
 
 function createPanelRow(row: ScoreRow): HTMLElement {

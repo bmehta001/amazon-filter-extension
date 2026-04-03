@@ -33,7 +33,7 @@ const MAX_RECIPIENTS = 20;
 
 export async function loadGiftPlans(): Promise<GiftPlan[]> {
   return new Promise((resolve) => {
-    chrome.storage.sync.get(STORAGE_KEY, (result) => {
+    chrome.storage.local.get(STORAGE_KEY, (result) => {
       if (chrome.runtime.lastError || !result[STORAGE_KEY]) {
         resolve([]);
         return;
@@ -45,7 +45,7 @@ export async function loadGiftPlans(): Promise<GiftPlan[]> {
 
 async function saveGiftPlans(plans: GiftPlan[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.set({ [STORAGE_KEY]: plans }, () => {
+    chrome.storage.local.set({ [STORAGE_KEY]: plans }, () => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;

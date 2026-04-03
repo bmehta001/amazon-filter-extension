@@ -72,7 +72,7 @@ export function extractPriceFromLocale(html: string, locale: LocaleConfig): numb
 
 function parseLocalPrice(priceStr: string, currency: string): number | null {
   let cleaned = priceStr.replace(/\s/g, "");
-  if ((currency === "EUR" || currency === "GBP") && cleaned.includes(",") && cleaned.indexOf(",") > cleaned.lastIndexOf(".")) {
+  if (currency === "EUR" && cleaned.includes(",") && cleaned.indexOf(",") > cleaned.lastIndexOf(".")) {
     cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   }
   if (currency === "INR" || currency === "JPY") {
