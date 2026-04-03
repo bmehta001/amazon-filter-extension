@@ -13,6 +13,7 @@ import type { ReviewScore } from "../../review/types";
 import type { ListingCompleteness } from "../../listing/completeness";
 import type { DealScore } from "../dealScoring";
 import type { BsrInfo } from "../../types";
+import type { LicenseTier } from "../../licensing/license";
 import { COLORS, RADII, FONT, SPACE } from "./designTokens";
 
 const BADGE_CLASS = "bas-product-score";
@@ -26,6 +27,18 @@ export interface ProductScoreInput {
   listingCompleteness?: ListingCompleteness;
   dealScore?: DealScore;
   bsr?: BsrInfo;
+  /** Data source for freshness display. */
+  source?: "local" | "community" | "cached";
+  /** Unix timestamp of when the data was computed/fetched. */
+  dataTimestamp?: number;
+  /** Current license tier (for gating detail panel). */
+  tier?: LicenseTier;
+  /** Callback when user clicks refresh. */
+  onRefresh?: (asin: string) => void;
+  /** ASIN for refresh callback. */
+  asin?: string;
+  /** Remaining free refreshes today (undefined = unlimited for Pro). */
+  refreshesRemaining?: number;
 }
 
 /** Computed Red Flag Report from all available signals. */
@@ -180,6 +193,48 @@ export const PRODUCT_SCORE_STYLES = `
   margin-top: ${SPACE[1]};
   line-height: 1.5;
 }
+
+/* Freshness indicator + refresh */
+.${BADGE_CLASS}-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: ${COLORS.textMuted};
+  margin: 2px 0 0;
+  font-family: ${FONT.family};
+}
+.${BADGE_CLASS}-source {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.${BADGE_CLASS}-refresh {
+  background: none;
+  border: none;
+  font-size: 10px;
+  color: ${COLORS.info};
+  cursor: pointer;
+  padding: 0 2px;
+  font-family: ${FONT.family};
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.${BADGE_CLASS}-refresh:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+.${BADGE_CLASS}-refresh:disabled {
+  color: ${COLORS.textMuted};
+  cursor: default;
+  opacity: 0.4;
+  text-decoration: none;
+}
+.${BADGE_CLASS}-pro-hint {
+  font-size: 9px;
+  color: #6b21a8;
+  font-style: italic;
+}
 `;
 
 type DotColor = "green" | "yellow" | "orange" | "red" | "gray";
@@ -309,11 +364,101 @@ export function injectProductScore(card: HTMLElement, input: ProductScoreInput):
     card.prepend(panel);
     card.prepend(badge);
   }
+
+  // Freshness indicator + refresh button (below badge, above panel)
+  const meta = buildFreshnessMeta(input);
+  if (meta) {
+    badge.after(meta);
+    // Move panel after the meta line
+    meta.after(panel);
+  }
+}
+
+/** Build the data source + freshness + refresh line below the badge. */
+function buildFreshnessMeta(input: ProductScoreInput): HTMLElement | null {
+  const meta = document.createElement("div");
+  meta.className = `${BADGE_CLASS}-meta`;
+
+  // Source + age indicator
+  const source = document.createElement("span");
+  source.className = `${BADGE_CLASS}-source`;
+
+  if (input.source === "community") {
+    const icon = document.createElement("span");
+    icon.textContent = "📡";
+    source.appendChild(icon);
+    const text = document.createElement("span");
+    const age = input.dataTimestamp ? formatAge(input.dataTimestamp) : "";
+    text.textContent = `Community${age ? ` · ${age}` : ""}`;
+    source.appendChild(text);
+  } else if (input.source === "local") {
+    const icon = document.createElement("span");
+    icon.textContent = "🔍";
+    source.appendChild(icon);
+    const text = document.createElement("span");
+    text.textContent = "Your analysis · just now";
+    source.appendChild(text);
+  } else {
+    // Default: no source info yet (still loading)
+    return null;
+  }
+
+  meta.appendChild(source);
+
+  // Refresh button
+  if (input.onRefresh && input.asin) {
+    const refreshBtn = document.createElement("button");
+    refreshBtn.className = `${BADGE_CLASS}-refresh`;
+    refreshBtn.setAttribute("aria-label", "Refresh analysis");
+
+    const canRefresh = input.refreshesRemaining === undefined || input.refreshesRemaining > 0;
+
+    if (canRefresh) {
+      const remaining = input.refreshesRemaining;
+      refreshBtn.textContent = remaining !== undefined
+        ? `🔄 Refresh (${remaining} left)`
+        : "🔄 Refresh";
+      refreshBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        input.onRefresh!(input.asin!);
+      });
+    } else {
+      refreshBtn.textContent = "🔄 No refreshes left today";
+      refreshBtn.disabled = true;
+    }
+
+    meta.appendChild(refreshBtn);
+  }
+
+  // Subtle Pro hint for detail panel (only if free tier and not already obvious)
+  if (input.tier === "free") {
+    const hint = document.createElement("span");
+    hint.className = `${BADGE_CLASS}-pro-hint`;
+    hint.textContent = "Pro: see full details";
+    meta.appendChild(hint);
+  }
+
+  return meta;
+}
+
+/** Format a timestamp as a human-readable age string. */
+function formatAge(timestamp: number): string {
+  const now = Date.now();
+  const diffMs = now - timestamp;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 /** Remove the product score badge and panel from a card. */
 export function removeProductScore(card: HTMLElement): void {
   card.querySelector(`.${BADGE_CLASS}`)?.remove();
+  card.querySelector(`.${BADGE_CLASS}-meta`)?.remove();
   card.querySelector(`.${PANEL_CLASS}`)?.remove();
 }
 
