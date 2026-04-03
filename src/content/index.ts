@@ -60,6 +60,7 @@ import { UPGRADE_PROMPT_STYLES, injectProLockInPlace } from "./ui/upgradePrompt"
 import { loadLicense, onLicenseChanged } from "../licensing/license";
 import type { LicenseTier } from "../licensing/license";
 import { isFeatureAvailable, getFeatureTeaser } from "../licensing/featureGate";
+import { isReleased } from "../releaseSchedule";
 import { trackProductsAnalyzed, trackSuspiciousListing, trackInflatedPrice, trackSavings, trackSearchEnhanced, trackRecallDetected } from "../insights/dashboard";
 import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
 import type { ProductScoreInput } from "./ui/productScore";
@@ -296,14 +297,14 @@ async function main(): Promise<void> {
   // Show onboarding feature tour on first visit (non-blocking)
   void tryShowFeatureTour();
 
-  // Initialize cross-search comparison tray (Pro)
-  if (isFeatureAvailable("compare-tray", currentTier)) {
+  // Initialize cross-search comparison tray (Pro, Wave 6)
+  if (isFeatureAvailable("compare-tray", currentTier) && isReleased("compare-tray")) {
     onCompareChange(renderCompareTray);
     loadCompareItems().then(renderCompareTray).catch((err) => { console.warn("[BAS] Compare tray load failed:", err); });
   }
 
-  // Check for product recalls (Pro)
-  if (isFeatureAvailable("recall-safety", currentTier)) {
+  // Check for product recalls (Pro, Wave 4)
+  if (isFeatureAvailable("recall-safety", currentTier) && isReleased("recall-safety")) {
     void queueRecallCheck();
   }
 
@@ -750,11 +751,11 @@ function renderFilterResults(
 
     injectCardActions(product, () => refilterAll(currentFilters));
 
-    if (currentPrefs.showSparklines && result !== "hide" && product.asin && isFeatureAvailable("price-sparklines", currentTier)) {
+    if (currentPrefs.showSparklines && result !== "hide" && product.asin && isFeatureAvailable("price-sparklines", currentTier) && isReleased("price-sparklines")) {
       injectPriceSparkline(product.element, product.asin);
     }
 
-    if (currentPrefs.showDealBadges && result !== "hide") {
+    if (currentPrefs.showDealBadges && result !== "hide" && isReleased("deal-scoring")) {
       if (isFeatureAvailable("deal-scoring", currentTier)) {
         const dealScore = computeDealScore(product);
         if (dealScore) {
