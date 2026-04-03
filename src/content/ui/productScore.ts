@@ -28,6 +28,18 @@ export interface ProductScoreInput {
   bsr?: BsrInfo;
 }
 
+/** Computed Red Flag Report from all available signals. */
+export interface RedFlagReport {
+  /** Overall verdict. */
+  verdict: "low-risk" | "caution" | "high-risk";
+  /** One-line recommendation. */
+  recommendation: string;
+  /** Top contributing red flags (max 3). */
+  flags: string[];
+  /** Top positive signals (max 2). */
+  positives: string[];
+}
+
 export const PRODUCT_SCORE_STYLES = `
 .${BADGE_CLASS} {
   display: inline-flex;
@@ -142,6 +154,32 @@ export const PRODUCT_SCORE_STYLES = `
 .${PANEL_CLASS}-row-reason {
   padding: 1px 0;
 }
+.${PANEL_CLASS}-verdict {
+  padding: ${SPACE[2]} 0;
+  border-bottom: 1px solid ${COLORS.borderLight};
+  margin-bottom: ${SPACE[1]};
+}
+.${PANEL_CLASS}-verdict-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.${PANEL_CLASS}-verdict--low-risk .${PANEL_CLASS}-verdict-line { color: ${COLORS.success}; }
+.${PANEL_CLASS}-verdict--caution .${PANEL_CLASS}-verdict-line { color: ${COLORS.warning}; }
+.${PANEL_CLASS}-verdict--high-risk .${PANEL_CLASS}-verdict-line { color: ${COLORS.danger}; }
+.${PANEL_CLASS}-verdict-rec {
+  font-size: 10px;
+  color: ${COLORS.textSecondary};
+  margin-top: 2px;
+}
+.${PANEL_CLASS}-verdict-flags {
+  font-size: 10px;
+  color: ${COLORS.textMuted};
+  margin-top: ${SPACE[1]};
+  line-height: 1.5;
+}
 `;
 
 type DotColor = "green" | "yellow" | "orange" | "red" | "gray";
@@ -166,9 +204,11 @@ export function injectProductScore(card: HTMLElement, input: ProductScoreInput):
   const rows = buildScoreRows(input);
   if (rows.length === 0) return;
 
-  // Compute overall label from dot colors
-  const colors = rows.map((r) => r.color);
-  const overallLabel = getOverallLabel(colors);
+  // Compute overall label from Red Flag Report
+  const report = computeRedFlagReport(input);
+  const overallLabel = report.verdict === "low-risk" ? "Low Risk"
+    : report.verdict === "caution" ? "Caution"
+    : "High Risk";
   const dots = rows.map((r) => r.color);
 
   // Badge
@@ -218,6 +258,10 @@ export function injectProductScore(card: HTMLElement, input: ProductScoreInput):
   panel.className = PANEL_CLASS;
   panel.setAttribute("role", "region");
   panel.setAttribute("aria-label", "Product score details");
+
+  // Red Flag Report verdict at top of panel
+  const redFlagReport = computeRedFlagReport(input);
+  panel.appendChild(buildVerdictSection(redFlagReport));
 
   for (const row of rows) {
     panel.appendChild(createPanelRow(row));
@@ -441,6 +485,124 @@ function dotColorToHex(color: DotColor): string {
     case "red": return COLORS.danger;
     case "gray": return "#999";
   }
+}
+
+/** Compute a Red Flag Report from all available signals. */
+export function computeRedFlagReport(input: ProductScoreInput): RedFlagReport {
+  const flags: string[] = [];
+  const positives: string[] = [];
+
+  // Review trust
+  if (input.reviewTrust) {
+    if (input.reviewTrust.score < 50) {
+      flags.push(`Review trust is low (${input.reviewTrust.score}/100) — reviews may be manipulated`);
+    } else if (input.reviewTrust.score >= 80) {
+      positives.push(`Reviews appear authentic (${input.reviewTrust.score}/100)`);
+    }
+  }
+
+  // Review quality
+  if (input.reviewScore) {
+    if (input.reviewScore.label === "suspicious") {
+      flags.push(`Review quality flagged as suspicious (${input.reviewScore.score}/100)`);
+    } else if (input.reviewScore.label === "authentic") {
+      positives.push(`Review quality looks authentic`);
+    }
+  }
+
+  // Seller trust
+  if (input.sellerTrust) {
+    if (input.sellerTrust.score < 50) {
+      flags.push(`Seller trust is low (${input.sellerTrust.score}/100) — unknown or risky seller`);
+    } else if (input.sellerTrust.score >= 75) {
+      positives.push(`Trusted seller`);
+    }
+  }
+
+  // Listing integrity
+  if (input.listingIntegrity) {
+    if (input.listingIntegrity.score < 45) {
+      flags.push(`Listing integrity concern (${input.listingIntegrity.score}/100) — possible hijacked listing`);
+    }
+  }
+
+  // Listing completeness
+  if (input.listingCompleteness && input.listingCompleteness.missingImportantCount >= 3) {
+    flags.push(`Listing missing ${input.listingCompleteness.missingImportantCount} key info fields`);
+  }
+
+  // Deal score
+  if (input.dealScore) {
+    if (input.dealScore.label === "Inflated Pricing" || input.dealScore.label === "Suspicious Discount") {
+      flags.push(`Price may be inflated — deal score: ${input.dealScore.score}/100`);
+    } else if (input.dealScore.label === "Great Deal") {
+      positives.push(`Great deal detected (${input.dealScore.score}/100)`);
+    }
+  }
+
+  // Determine verdict
+  let verdict: RedFlagReport["verdict"];
+  let recommendation: string;
+
+  if (flags.length >= 3) {
+    verdict = "high-risk";
+    recommendation = "Multiple concerns detected. Consider alternatives or research further.";
+  } else if (flags.length >= 1) {
+    verdict = "caution";
+    recommendation = "Some concerns found. Review the details before purchasing.";
+  } else {
+    verdict = "low-risk";
+    recommendation = positives.length > 0
+      ? "This product looks good across all checks."
+      : "No significant concerns detected.";
+  }
+
+  return {
+    verdict,
+    recommendation,
+    flags: flags.slice(0, 3),
+    positives: positives.slice(0, 2),
+  };
+}
+
+/** Build the Red Flag Report verdict section for the detail panel. */
+function buildVerdictSection(report: RedFlagReport): HTMLElement {
+  const section = document.createElement("div");
+  section.className = `${PANEL_CLASS}-verdict ${PANEL_CLASS}-verdict--${report.verdict}`;
+
+  const verdictLine = document.createElement("div");
+  verdictLine.className = `${PANEL_CLASS}-verdict-line`;
+  const icon = report.verdict === "low-risk" ? "✅"
+    : report.verdict === "caution" ? "⚠️"
+    : "🚫";
+  const label = report.verdict === "low-risk" ? "Low Risk"
+    : report.verdict === "caution" ? "Caution"
+    : "High Risk";
+  verdictLine.textContent = `${icon} ${label}`;
+  section.appendChild(verdictLine);
+
+  const rec = document.createElement("div");
+  rec.className = `${PANEL_CLASS}-verdict-rec`;
+  rec.textContent = report.recommendation;
+  section.appendChild(rec);
+
+  if (report.flags.length > 0 || report.positives.length > 0) {
+    const details = document.createElement("div");
+    details.className = `${PANEL_CLASS}-verdict-flags`;
+    for (const flag of report.flags) {
+      const line = document.createElement("div");
+      line.textContent = `🚩 ${flag}`;
+      details.appendChild(line);
+    }
+    for (const pos of report.positives) {
+      const line = document.createElement("div");
+      line.textContent = `✓ ${pos}`;
+      details.appendChild(line);
+    }
+    section.appendChild(details);
+  }
+
+  return section;
 }
 
 function capitalize(s: string): string {
