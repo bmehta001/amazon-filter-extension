@@ -56,6 +56,10 @@ import type { SummaryPanelData } from "./ui/reviewSummaryPanel";
 import { injectReviewGallery, REVIEW_GALLERY_STYLES } from "./ui/reviewGallery";
 import { injectListingQualityBadge, LISTING_QUALITY_STYLES } from "./ui/listingQualityBadge";
 import { DESIGN_TOKEN_STYLES } from "./ui/designTokens";
+import { UPGRADE_PROMPT_STYLES, injectProLockInPlace } from "./ui/upgradePrompt";
+import { loadLicense, onLicenseChanged } from "../licensing/license";
+import type { LicenseTier } from "../licensing/license";
+import { isFeatureAvailable } from "../licensing/featureGate";
 import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
 import type { ProductScoreInput } from "./ui/productScore";
 import { injectPriceIntel, PRICE_INTEL_STYLES } from "./ui/priceIntel";
@@ -102,6 +106,7 @@ ${LISTING_QUALITY_STYLES}
 ${PRODUCT_SCORE_STYLES}
 ${PRICE_INTEL_STYLES}
 ${UNIFIED_REVIEW_STYLES}
+${UPGRADE_PROMPT_STYLES}
 `;
 
 // CSS to hide all sponsored carousels/slots (top, mid-page, and bottom)
@@ -188,6 +193,8 @@ let currentPrefs: GlobalPreferences = { ...DEFAULT_PREFERENCES };
 let currentWeightProfile: CategoryWeightProfile | null = null;
 /** Guard flag to prevent concurrent re-injection from URL change + DOM observer. */
 let reinjectionInProgress = false;
+/** Current license tier (loaded once on init, updated on changes). */
+let currentTier: LicenseTier = "free";
 
 /** Gather all enrichment maps into the shape expected by the cache module. */
 function gatherEnrichmentMaps() {
@@ -231,10 +238,13 @@ async function main(): Promise<void> {
   // Inject global styles
   injectGlobalStyles();
 
-  // Load saved filters, preferences, brand allowlist, and learned brands concurrently
-  const [filters, prefs] = await Promise.all([loadFilters(), loadPreferences(), initAllowlist(), loadLearnedBrands()]);
+  // Load saved filters, preferences, brand allowlist, learned brands, and license concurrently
+  const [filters, prefs, , , license] = await Promise.all([
+    loadFilters(), loadPreferences(), initAllowlist(), loadLearnedBrands(), loadLicense(),
+  ]);
   currentFilters = filters;
   currentPrefs = prefs;
+  currentTier = license.tier;
 
   // Apply preference defaults to filters for new sessions
   if (currentPrefs.hideSponsoredDefault && !currentFilters.hideSponsored) {
@@ -264,6 +274,12 @@ async function main(): Promise<void> {
     void filterAllProducts();
   });
 
+  // Listen for license changes (e.g., user upgrades from popup)
+  onLicenseChanged((license) => {
+    currentTier = license.tier;
+    void filterAllProducts(); // Re-render with unlocked features
+  });
+
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredVisibility(currentFilters.hideSponsored);
 
@@ -279,12 +295,16 @@ async function main(): Promise<void> {
   // Show onboarding feature tour on first visit (non-blocking)
   void tryShowFeatureTour();
 
-  // Initialize cross-search comparison tray
-  onCompareChange(renderCompareTray);
-  loadCompareItems().then(renderCompareTray).catch((err) => { console.warn("[BAS] Compare tray load failed:", err); });
+  // Initialize cross-search comparison tray (Pro)
+  if (isFeatureAvailable("compare-tray", currentTier)) {
+    onCompareChange(renderCompareTray);
+    loadCompareItems().then(renderCompareTray).catch((err) => { console.warn("[BAS] Compare tray load failed:", err); });
+  }
 
-  // Check for product recalls (non-blocking background task)
-  void queueRecallCheck();
+  // Check for product recalls (Pro)
+  if (isFeatureAvailable("recall-safety", currentTier)) {
+    void queueRecallCheck();
+  }
 
   // Start background pagination if viewing multiple pages (not on Haul — Haul uses infinite scroll)
   if (!isHaulMode && currentFilters.totalPages > 1) {
@@ -725,19 +745,20 @@ function renderFilterResults(
 
     injectCardActions(product, () => refilterAll(currentFilters));
 
-    if (currentPrefs.showSparklines && result !== "hide" && product.asin) {
+    if (currentPrefs.showSparklines && result !== "hide" && product.asin && isFeatureAvailable("price-sparklines", currentTier)) {
       injectPriceSparkline(product.element, product.asin);
     }
 
     if (currentPrefs.showDealBadges && result !== "hide") {
-      const dealScore = computeDealScore(product);
-      if (dealScore) {
-        if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
-      }
+      if (isFeatureAvailable("deal-scoring", currentTier)) {
+        const dealScore = computeDealScore(product);
+        if (dealScore) {
+          if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
+        }
 
-      // Build unified price intelligence line
-      const priceIntelInput: PriceIntelInput = {};
-      if (dealScore) priceIntelInput.dealScore = dealScore;
+        // Build unified price intelligence line
+        const priceIntelInput: PriceIntelInput = {};
+        if (dealScore) priceIntelInput.dealScore = dealScore;
 
       if (product.effectivePrice != null) {
         const stack = computeSavingsStack(product);
@@ -760,6 +781,7 @@ function renderFilterResults(
       }
 
       injectPriceIntel(product.element, priceIntelInput);
+      } // end deal-scoring gate
     }
 
     const reasons = buildFilterReasons(product, currentFilters);
@@ -1098,15 +1120,19 @@ function queueReviewAnalysis(products: Product[]): void {
     // Skip if already scored this session — inject from cache
     if (reviewScoreMap.has(asin)) {
       // Inject unified product score (replaces individual review/trust/seller/listing badges)
-      injectConfidenceBadgeForProduct(asin, product.element);
+      if (isFeatureAvailable("trust-scores", currentTier)) {
+        injectConfidenceBadgeForProduct(asin, product.element);
+      }
 
       // Inject unified reviews section (replaces separate insights + summary + gallery)
-      const reviewData: UnifiedReviewData = {};
-      if (reviewSummaryMap.has(asin)) reviewData.summary = reviewSummaryMap.get(asin);
-      if (productInsightsMap.has(asin)) reviewData.insights = productInsightsMap.get(asin);
-      if (reviewMediaMap.has(asin)) reviewData.mediaGallery = reviewMediaMap.get(asin);
-      reviewData.ignoredCategories = currentFilters.ignoredCategories;
-      injectUnifiedReviews(product.element, reviewData);
+      if (isFeatureAvailable("review-detail-panel", currentTier)) {
+        const reviewData: UnifiedReviewData = {};
+        if (reviewSummaryMap.has(asin)) reviewData.summary = reviewSummaryMap.get(asin);
+        if (productInsightsMap.has(asin)) reviewData.insights = productInsightsMap.get(asin);
+        if (reviewMediaMap.has(asin)) reviewData.mediaGallery = reviewMediaMap.get(asin);
+        reviewData.ignoredCategories = currentFilters.ignoredCategories;
+        injectUnifiedReviews(product.element, reviewData);
+      }
       continue;
     }
 
