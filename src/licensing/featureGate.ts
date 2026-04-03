@@ -70,12 +70,11 @@ export function getRequiredTier(feature: FeatureId): LicenseTier {
 
 /**
  * Check if a feature is available for the given tier.
- * Use with the cached tier from `loadLicense()` — don't call
- * `isPro()` per-feature (too many storage reads).
+ * All features in TIER_MAP are pro-gated; free features are not in
+ * the map and don't need checking. Use with the cached tier from
+ * loadLicense() — don't call isPro() per-feature (too many storage reads).
  */
 export function isFeatureAvailable(feature: FeatureId, currentTier: LicenseTier): boolean {
-  const required = TIER_MAP[feature];
-  if (required === "free") return true;
   return currentTier === "pro";
 }
 

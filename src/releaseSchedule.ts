@@ -95,7 +95,7 @@ const WAVE_MAP: Record<string, ReleaseWave> = {
 /** Check if a feature has been released in the current wave. */
 export function isReleased(feature: string): boolean {
   const requiredWave = WAVE_MAP[feature];
-  if (requiredWave === undefined) return true; // Unknown features default to released
+  if (requiredWave === undefined) return false; // Unknown features default to unreleased
   return CURRENT_WAVE >= requiredWave;
 }
 

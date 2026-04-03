@@ -210,8 +210,12 @@ function toggleOverflowMenu(
     });
   }
 
-  anchor.style.position = "relative";
-  anchor.parentElement?.appendChild(menu);
+  // Position menu relative to the actions container, not the button
+  const actionsContainer = anchor.closest(".bas-card-actions") as HTMLElement | null;
+  if (actionsContainer) {
+    actionsContainer.style.position = "relative";
+  }
+  (actionsContainer ?? anchor.parentElement)?.appendChild(menu);
 
   // Close on outside click
   const abortCtrl = new AbortController();

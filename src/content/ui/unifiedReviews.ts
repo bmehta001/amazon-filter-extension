@@ -442,7 +442,9 @@ function createGalleryThumb(item: ReviewMedia): HTMLElement {
   thumb.className = `${SECTION_CLASS}-gallery-thumb`;
 
   const img = document.createElement("img");
-  img.src = item.thumbnailUrl;
+  if (isAmazonImageUrl(item.thumbnailUrl)) {
+    img.src = item.thumbnailUrl;
+  }
   img.alt = `Review ${item.type}`;
   img.loading = "lazy";
   thumb.appendChild(img);
@@ -455,4 +457,12 @@ function createGalleryThumb(item: ReviewMedia): HTMLElement {
   }
 
   return thumb;
+}
+
+/** Validate that a URL points to an Amazon image CDN. */
+function isAmazonImageUrl(url: string): boolean {
+  if (!url.startsWith("https://")) return false;
+  return url.includes("images-amazon.com/") ||
+         url.includes("m.media-amazon.com/") ||
+         url.includes("images-na.ssl-images-amazon.com/");
 }

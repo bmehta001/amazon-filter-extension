@@ -5,6 +5,7 @@ export default defineManifest({
   manifest_version: 3,
   name: "Better Amazon Search",
   version: "1.0.0",
+  minimum_chrome_version: "105",
   description:
     "Advanced filters for Amazon search results: min reviews, keyword exclusion, brand trust, CCC price history, and more.",
   permissions: ["storage", "alarms", "notifications", "declarativeContent"],

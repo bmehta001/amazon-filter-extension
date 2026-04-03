@@ -335,7 +335,9 @@ function createThumbnail(item: ReviewMedia, index: number, allItems: ReviewMedia
   thumb.className = "bas-gallery-thumb";
 
   const img = document.createElement("img");
-  img.src = item.thumbnailUrl;
+  if (isAmazonImage(item.thumbnailUrl)) {
+    img.src = item.thumbnailUrl;
+  }
   img.alt = `Review ${item.type} ${index + 1}`;
   img.loading = "lazy";
   thumb.appendChild(img);
@@ -529,4 +531,12 @@ function openLightbox(items: ReviewMedia[], startIndex: number): void {
 function closeLightbox(overlay: HTMLElement, keyHandler: (e: KeyboardEvent) => void): void {
   document.removeEventListener("keydown", keyHandler);
   overlay.remove();
+}
+
+/** Validate that a URL points to an Amazon image CDN. */
+function isAmazonImage(url: string): boolean {
+  if (!url.startsWith("https://")) return false;
+  return url.includes("images-amazon.com/") ||
+         url.includes("m.media-amazon.com/") ||
+         url.includes("images-na.ssl-images-amazon.com/");
 }
