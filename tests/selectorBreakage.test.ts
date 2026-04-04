@@ -11,7 +11,7 @@
  * Run: npx vitest run tests/selectorBreakage.test.ts
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -24,7 +24,7 @@ vi.stubGlobal("chrome", {
   runtime: { lastError: undefined },
 });
 
-import { $, $$, SEARCH, REVIEW, LISTING } from "../src/selectors";
+import { $, $$, SEARCH, REVIEW, LISTING, getFallbackStats, resetFallbackStats } from "../src/selectors";
 
 function loadSnapshot(filename: string): Document {
   const html = readFileSync(join(__dirname, "..", "example_pages", filename), "utf-8");
@@ -163,5 +163,54 @@ describe("selector registry completeness", () => {
         }
       }
     }
+  });
+});
+
+// ── Fallback Tracking Tests ─────────────────────────────────────────
+
+describe("fallback tracking", () => {
+  beforeEach(() => {
+    resetFallbackStats();
+    document.body.innerHTML = "";
+  });
+
+  it("does not track when primary selector matches", () => {
+    document.body.innerHTML = '<div class="primary">content</div>';
+    $$(document, ".primary", ".fallback");
+    const stats = getFallbackStats();
+    expect(stats.length).toBe(0);
+  });
+
+  it("tracks when fallback selector is used", () => {
+    document.body.innerHTML = '<div class="fallback">content</div>';
+    $$(document, ".primary-missing", ".fallback");
+    const stats = getFallbackStats();
+    expect(stats.length).toBe(1);
+    expect(stats[0].matchedIndex).toBe(1);
+    expect(stats[0].count).toBe(1);
+  });
+
+  it("counts repeated fallback usage", () => {
+    document.body.innerHTML = '<div class="fb">a</div>';
+    $(document, ".missing", ".fb");
+    $(document, ".missing", ".fb");
+    $(document, ".missing", ".fb");
+    const stats = getFallbackStats();
+    expect(stats[0].count).toBe(3);
+  });
+
+  it("tracks different fallback depths", () => {
+    document.body.innerHTML = '<div class="third">x</div>';
+    $(document, ".first-missing", ".second-missing", ".third");
+    const stats = getFallbackStats();
+    expect(stats[0].matchedIndex).toBe(2);
+  });
+
+  it("resets stats correctly", () => {
+    document.body.innerHTML = '<div class="fb">a</div>';
+    $(document, ".missing", ".fb");
+    expect(getFallbackStats().length).toBe(1);
+    resetFallbackStats();
+    expect(getFallbackStats().length).toBe(0);
   });
 });

@@ -98,25 +98,104 @@ function getSelectors(group: string, key: string, builtIn: readonly string[]): s
   return [...builtIn];
 }
 
-// ── Selector Helper ──────────────────────────────────────────────────
+// ── Fallback Tracking ────────────────────────────────────────────────
 
-/** Try multiple selectors in order, return the first match. */
+/**
+ * Tracks when a primary selector fails and a fallback is used.
+ * Key: selector string that succeeded. Value: count + which index it was.
+ * Periodically flushed to console.warn so developers notice degradation.
+ */
+interface FallbackEvent {
+  selectors: string[];
+  matchedIndex: number;
+  matchedSelector: string;
+  count: number;
+}
+
+const fallbackLog = new Map<string, FallbackEvent>();
+let fallbackFlushTimer: ReturnType<typeof setTimeout> | null = null;
+const FALLBACK_FLUSH_INTERVAL = 30_000; // Log summary every 30s
+
+function trackFallback(selectors: string[], matchedIndex: number): void {
+  if (matchedIndex === 0) return; // Primary selector worked — no issue
+
+  const key = selectors.join(" | ");
+  const existing = fallbackLog.get(key);
+  if (existing) {
+    existing.count++;
+  } else {
+    fallbackLog.set(key, {
+      selectors,
+      matchedIndex,
+      matchedSelector: selectors[matchedIndex],
+      count: 1,
+    });
+  }
+
+  // Schedule a flush if not already pending
+  if (!fallbackFlushTimer) {
+    fallbackFlushTimer = setTimeout(flushFallbackLog, FALLBACK_FLUSH_INTERVAL);
+  }
+}
+
+function flushFallbackLog(): void {
+  fallbackFlushTimer = null;
+  if (fallbackLog.size === 0) return;
+
+  console.warn(
+    `[BAS] ⚠️ Selector fallback report — ${fallbackLog.size} selector group(s) using fallbacks:`,
+  );
+  for (const [, event] of fallbackLog) {
+    console.warn(
+      `  Primary failed: "${event.selectors[0]}" → Fallback #${event.matchedIndex} worked: "${event.matchedSelector}" (${event.count}×)`,
+    );
+  }
+  fallbackLog.clear();
+}
+
+/** Get the current fallback stats (for telemetry or testing). */
+export function getFallbackStats(): { group: string; matchedIndex: number; count: number }[] {
+  return Array.from(fallbackLog.values()).map((e) => ({
+    group: e.selectors[0],
+    matchedIndex: e.matchedIndex,
+    count: e.count,
+  }));
+}
+
+/** Reset fallback tracking (for tests). */
+export function resetFallbackStats(): void {
+  fallbackLog.clear();
+  if (fallbackFlushTimer) {
+    clearTimeout(fallbackFlushTimer);
+    fallbackFlushTimer = null;
+  }
+}
+
+// ── Selector Helpers ─────────────────────────────────────────────────
+
+/** Try multiple selectors in order, return the first match. Tracks fallback usage. */
 export function $(el: ParentNode, ...selectors: string[]): Element | null {
-  for (const sel of selectors) {
+  for (let i = 0; i < selectors.length; i++) {
     try {
-      const result = el.querySelector(sel);
-      if (result) return result;
+      const result = el.querySelector(selectors[i]);
+      if (result) {
+        trackFallback(selectors, i);
+        return result;
+      }
     } catch { /* invalid selector — skip */ }
   }
   return null;
 }
 
-/** Try multiple selectors in order, return the first non-empty result. */
+/** Try multiple selectors in order, return the first non-empty result. Tracks fallback usage. */
 export function $$(el: ParentNode, ...selectors: string[]): Element[] {
-  for (const sel of selectors) {
+  for (let i = 0; i < selectors.length; i++) {
     try {
-      const results = el.querySelectorAll(sel);
-      if (results.length > 0) return Array.from(results);
+      const results = el.querySelectorAll(selectors[i]);
+      if (results.length > 0) {
+        trackFallback(selectors, i);
+        return Array.from(results);
+      }
     } catch { /* invalid selector — skip */ }
   }
   return [];
