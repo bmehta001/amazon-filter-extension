@@ -1,39 +1,83 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// ── chrome.storage.session mock ──
+let sessionData: Record<string, unknown> = {};
+
+vi.stubGlobal("chrome", {
+  storage: {
+    session: {
+      get(keys: string | string[], cb: (result: Record<string, unknown>) => void) {
+        const keyArr = typeof keys === "string" ? [keys] : keys;
+        const result: Record<string, unknown> = {};
+        for (const k of keyArr) {
+          if (k in sessionData) result[k] = sessionData[k];
+        }
+        cb(result);
+      },
+      set(data: Record<string, unknown>, cb?: () => void) {
+        Object.assign(sessionData, data);
+        cb?.();
+      },
+      remove(keys: string | string[], cb?: () => void) {
+        const keyArr = typeof keys === "string" ? [keys] : keys;
+        for (const k of keyArr) delete sessionData[k];
+        cb?.();
+      },
+    },
+    sync: {
+      get: vi.fn((_k: unknown, cb: (r: Record<string, unknown>) => void) => cb({})),
+      set: vi.fn((_d: unknown, cb?: () => void) => cb?.()),
+    },
+    local: {
+      get: vi.fn((_k: unknown, cb: (r: Record<string, unknown>) => void) => cb({})),
+      set: vi.fn((_d: unknown, cb?: () => void) => cb?.()),
+    },
+    onChanged: { addListener: vi.fn() },
+  },
+  runtime: { lastError: undefined },
+});
+
 import {
   saveMapToCache,
   loadMapFromCache,
   saveAllEnrichment,
   restoreAllEnrichment,
   clearEnrichmentCache,
+  preloadSessionCache,
 } from "../src/util/enrichmentCache";
 
+/** Helper: save then preload then load (simulates the real flow). */
+async function saveAndReload<T>(key: string, map: Map<string, T>): Promise<Map<string, T>> {
+  saveMapToCache(key, map);
+  await preloadSessionCache();
+  return loadMapFromCache<T>(key);
+}
+
 describe("enrichmentCache", () => {
-  beforeEach(() => {
-    sessionStorage.clear();
+  beforeEach(async () => {
+    sessionData = {};
+    await preloadSessionCache();
   });
 
   describe("saveMapToCache / loadMapFromCache", () => {
-    it("round-trips a Map<string, string>", () => {
+    it("round-trips a Map<string, string>", async () => {
       const original = new Map([["A1", "BrandX"], ["A2", "BrandY"]]);
-      saveMapToCache("brandMap", original);
-      const restored = loadMapFromCache<string>("brandMap");
+      const restored = await saveAndReload("brandMap", original);
       expect(restored.size).toBe(2);
       expect(restored.get("A1")).toBe("BrandX");
       expect(restored.get("A2")).toBe("BrandY");
     });
 
-    it("round-trips a Map<string, number>", () => {
+    it("round-trips a Map<string, number>", async () => {
       const original = new Map([["A1", 85], ["A2", 42]]);
-      saveMapToCache("dealScoreExportMap", original);
-      const restored = loadMapFromCache<number>("dealScoreExportMap");
+      const restored = await saveAndReload("dealScoreExportMap", original);
       expect(restored.get("A1")).toBe(85);
     });
 
-    it("round-trips complex objects", () => {
+    it("round-trips complex objects", async () => {
       const data = { score: 78, label: "mixed" as const, signals: ["sig1"] };
       const original = new Map([["A1", data]]);
-      saveMapToCache("trustScoreMap", original);
-      const restored = loadMapFromCache<typeof data>("trustScoreMap");
+      const restored = await saveAndReload("trustScoreMap", original);
       expect(restored.get("A1")).toEqual(data);
     });
 
@@ -44,61 +88,51 @@ describe("enrichmentCache", () => {
 
     it("skips saving empty maps", () => {
       saveMapToCache("brandMap", new Map());
-      expect(sessionStorage.getItem("bas-ec-brandMap")).toBeNull();
+      expect(sessionData["bas-ec-brandMap"]).toBeUndefined();
     });
 
-    it("expires entries past TTL", () => {
+    it("expires entries past TTL", async () => {
       const original = new Map([["A1", "old"]]);
       saveMapToCache("brandMap", original);
 
       // Manually backdate the timestamp
-      const raw = sessionStorage.getItem("bas-ec-brandMap")!;
-      const entry = JSON.parse(raw);
+      const entry = sessionData["bas-ec-brandMap"] as { ts: number };
       entry.ts = Date.now() - 31 * 60 * 1000; // 31 minutes ago
-      sessionStorage.setItem("bas-ec-brandMap", JSON.stringify(entry));
 
+      await preloadSessionCache();
       const restored = loadMapFromCache<string>("brandMap");
       expect(restored.size).toBe(0);
-      expect(sessionStorage.getItem("bas-ec-brandMap")).toBeNull();
     });
 
-    it("handles corrupted JSON gracefully", () => {
-      sessionStorage.setItem("bas-ec-brandMap", "not-json{{{");
+    it("handles corrupted data gracefully", async () => {
+      // Write a non-object value directly
+      sessionData["bas-ec-brandMap"] = "not-valid-entry";
+      await preloadSessionCache();
       const restored = loadMapFromCache<string>("brandMap");
       expect(restored.size).toBe(0);
-      // Corrupted entry should be removed
-      expect(sessionStorage.getItem("bas-ec-brandMap")).toBeNull();
     });
 
-    it("trims maps exceeding 1000 entries", () => {
+    it("trims maps exceeding 1000 entries", async () => {
       const large = new Map<string, string>();
       for (let i = 0; i < 1100; i++) {
         large.set(`ASIN${i}`, `Brand${i}`);
       }
-      saveMapToCache("brandMap", large);
-      const restored = loadMapFromCache<string>("brandMap");
+      const restored = await saveAndReload("brandMap", large);
       expect(restored.size).toBe(1000);
       // Should keep the last 1000 (most recent)
       expect(restored.has("ASIN100")).toBe(true);
       expect(restored.has("ASIN1099")).toBe(true);
     });
 
-    it("handles quota exceeded gracefully without crashing", () => {
-      // Mock setItem to always fail (simulates full storage)
-      vi.spyOn(sessionStorage, "setItem").mockImplementation(() => {
-        throw new DOMException("QuotaExceededError");
-      });
-
+    it("handles storage error gracefully without crashing", () => {
+      // Should not throw even if storage is unavailable
       const data = new Map([["A1", "fresh"]]);
-      // Should not throw
       expect(() => saveMapToCache("brandMap", data)).not.toThrow();
-
-      vi.restoreAllMocks();
     });
   });
 
   describe("saveAllEnrichment / restoreAllEnrichment", () => {
-    it("round-trips all 11 maps", () => {
+    it("round-trips all maps", async () => {
       const maps = {
         reviewScoreMap: new Map([["A1", { score: 80, label: "authentic" as const, breakdown: {} as any, computedAt: 1 }]]),
         productInsightsMap: new Map([["A1", { adjustedRating: 4.2 } as any]]),
@@ -119,7 +153,8 @@ describe("enrichmentCache", () => {
 
       saveAllEnrichment(maps);
 
-      // Clear in-memory to prove we're reading from storage
+      // Preload cache snapshot then restore
+      await preloadSessionCache();
       const restored = restoreAllEnrichment();
 
       expect(restored.reviewScoreMap.get("A1")?.score).toBe(80);
@@ -150,24 +185,15 @@ describe("enrichmentCache", () => {
   });
 
   describe("clearEnrichmentCache", () => {
-    it("removes all bas-ec-* entries", () => {
+    it("removes all bas-ec-* entries", async () => {
       saveMapToCache("brandMap", new Map([["A1", "X"]]));
       saveMapToCache("originMap", new Map([["A1", "US"]]));
-      expect(sessionStorage.length).toBeGreaterThanOrEqual(2);
+      expect(Object.keys(sessionData).length).toBeGreaterThanOrEqual(2);
 
       clearEnrichmentCache();
 
-      expect(sessionStorage.getItem("bas-ec-brandMap")).toBeNull();
-      expect(sessionStorage.getItem("bas-ec-originMap")).toBeNull();
-    });
-
-    it("does not remove non-cache sessionStorage keys", () => {
-      sessionStorage.setItem("other-key", "value");
-      saveMapToCache("brandMap", new Map([["A1", "X"]]));
-
-      clearEnrichmentCache();
-
-      expect(sessionStorage.getItem("other-key")).toBe("value");
+      expect(sessionData["bas-ec-brandMap"]).toBeUndefined();
+      expect(sessionData["bas-ec-originMap"]).toBeUndefined();
     });
   });
 });

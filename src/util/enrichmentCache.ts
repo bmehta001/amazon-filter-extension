@@ -47,7 +47,9 @@ const MAP_KEYS = [
 type MapKey = (typeof MAP_KEYS)[number];
 
 /**
- * Save a single Map to sessionStorage with a timestamp.
+ * Save a single Map to chrome.storage.session with a timestamp.
+ * Uses chrome.storage.session instead of sessionStorage to prevent
+ * Amazon's JavaScript from reading our cached analysis data.
  * Trims to MAX_ENTRIES_PER_MAP most recent entries if over limit.
  */
 export function saveMapToCache<T>(key: string, map: Map<string, T>): void {
@@ -55,7 +57,6 @@ export function saveMapToCache<T>(key: string, map: Map<string, T>): void {
 
   let data: Record<string, T>;
   if (map.size > MAX_ENTRIES_PER_MAP) {
-    // Keep only the last MAX_ENTRIES_PER_MAP entries (most recently added)
     const entries = [...map.entries()].slice(-MAX_ENTRIES_PER_MAP);
     data = Object.fromEntries(entries);
   } else {
@@ -65,37 +66,50 @@ export function saveMapToCache<T>(key: string, map: Map<string, T>): void {
   const entry: CacheEntry<T> = { ts: Date.now(), data };
 
   try {
-    sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+    chrome.storage.session.set({ [CACHE_PREFIX + key]: entry });
   } catch {
-    // Quota exceeded — clear expired entries and retry once
-    clearExpiredEntries();
-    try {
-      sessionStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
-    } catch {
-      // Still full — skip caching for this map
-    }
+    // Storage error — skip caching
   }
 }
 
 /**
- * Load a single Map from sessionStorage. Returns empty Map if missing,
- * expired, or corrupted.
+ * Load a single Map from chrome.storage.session. Returns empty Map if
+ * missing, expired, or corrupted. Synchronous wrapper using cached data.
  */
 export function loadMapFromCache<T>(key: string): Map<string, T> {
-  const raw = sessionStorage.getItem(CACHE_PREFIX + key);
-  if (!raw) return new Map();
+  // Use the synchronously-loaded cache snapshot
+  const entry = sessionCacheSnapshot[CACHE_PREFIX + key] as CacheEntry<T> | undefined;
+  if (!entry) return new Map();
 
-  try {
-    const entry: CacheEntry<T> = JSON.parse(raw);
-    if (Date.now() - entry.ts > CACHE_TTL_MS) {
-      sessionStorage.removeItem(CACHE_PREFIX + key);
-      return new Map();
-    }
-    return new Map(Object.entries(entry.data) as [string, T][]);
-  } catch {
-    sessionStorage.removeItem(CACHE_PREFIX + key);
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    chrome.storage.session.remove(CACHE_PREFIX + key);
     return new Map();
   }
+
+  try {
+    return new Map(Object.entries(entry.data) as [string, T][]);
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Pre-load all session cache entries for synchronous access.
+ * Call once on init before restoreAllEnrichment().
+ */
+let sessionCacheSnapshot: Record<string, unknown> = {};
+export async function preloadSessionCache(): Promise<void> {
+  const keys = MAP_KEYS.map((k) => CACHE_PREFIX + k);
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.session.get(keys, (result) => {
+        sessionCacheSnapshot = result ?? {};
+        resolve();
+      });
+    } catch {
+      resolve(); // Graceful fallback — empty cache
+    }
+  });
 }
 
 /** Shape returned by restoreAllEnrichment(). */
@@ -157,26 +171,11 @@ export function restoreAllEnrichment(): EnrichmentCacheMaps {
   };
 }
 
-/** Remove all enrichment cache entries from sessionStorage. */
+/** Remove all enrichment cache entries from chrome.storage.session. */
 export function clearEnrichmentCache(): void {
-  for (const key of MAP_KEYS) {
-    sessionStorage.removeItem(CACHE_PREFIX + key);
-  }
-}
-
-/** Remove cache entries that have exceeded the TTL. */
-function clearExpiredEntries(): void {
-  const now = Date.now();
-  for (const key of MAP_KEYS) {
-    const raw = sessionStorage.getItem(CACHE_PREFIX + key);
-    if (!raw) continue;
-    try {
-      const entry: CacheEntry<unknown> = JSON.parse(raw);
-      if (now - entry.ts > CACHE_TTL_MS) {
-        sessionStorage.removeItem(CACHE_PREFIX + key);
-      }
-    } catch {
-      sessionStorage.removeItem(CACHE_PREFIX + key);
-    }
-  }
+  const keys = MAP_KEYS.map((k) => CACHE_PREFIX + k);
+  try {
+    chrome.storage.session.remove(keys);
+  } catch { /* ignore */ }
+  sessionCacheSnapshot = {};
 }

@@ -1,4 +1,4 @@
-import { saveAllEnrichment, restoreAllEnrichment } from "../util/enrichmentCache";
+import { saveAllEnrichment, restoreAllEnrichment, preloadSessionCache } from "../util/enrichmentCache";
 import { loadFilters, saveFilters, syncFlushPendingFilterSave, onFiltersChanged, loadPreferences, onPreferencesChanged } from "../util/storage";
 import { isAmazonSearchPage, isAmazonHaulPage, isAmazonSupportedPage, buildAmazonOnlyUrl, buildCccUrl } from "../util/url";
 import { resolveNetworkUsage } from "../util/network";
@@ -292,7 +292,8 @@ async function main(): Promise<void> {
   // Apply sponsored top-slot hiding if enabled
   updateSponsoredVisibility(currentFilters.hideSponsored);
 
-  // Restore enrichment data from sessionStorage (survives back-navigation)
+  // Restore enrichment data from chrome.storage.session (survives back-navigation)
+  await preloadSessionCache(); // Load session cache before synchronous access
   mergeFromCache();
 
   // Inject the filter bar, retrying if DOM isn't ready yet

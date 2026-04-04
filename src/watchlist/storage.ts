@@ -3,6 +3,23 @@
  * and provides CRUD operations for the background service worker and popup.
  */
 
+const ALLOWED_DOMAINS = new Set([
+  "www.amazon.com", "www.amazon.co.uk", "www.amazon.ca",
+  "www.amazon.de", "www.amazon.fr", "www.amazon.it",
+  "www.amazon.es", "www.amazon.in", "www.amazon.co.jp",
+  "www.amazon.com.au",
+]);
+
+/** Validate and sanitize a domain. Returns a safe Amazon domain. */
+function validateDomain(domain: string): string {
+  return ALLOWED_DOMAINS.has(domain) ? domain : "www.amazon.com";
+}
+
+/** Validate ASIN format (10 alphanumeric characters). */
+function validateAsin(asin: string): boolean {
+  return /^[A-Z0-9]{10}$/i.test(asin);
+}
+
 /** A single price snapshot recorded during a background check. */
 export interface PriceSnapshot {
   price: number;
@@ -92,7 +109,7 @@ export async function addToWatchlist(
     lastKnownPrice: currentPrice,
     addedAt: now,
     lastCheckedAt: now,
-    domain,
+    domain: validateDomain(domain),
     priceHistory: [{ price: currentPrice, checkedAt: now }],
     consecutiveFailures: 0,
   });

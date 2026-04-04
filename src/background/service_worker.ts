@@ -114,7 +114,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 chrome.notifications.onClicked.addListener((notificationId) => {
   // Price drop notifications have the format: bas-price-drop-{ASIN}
-  const match = notificationId.match(/^bas-price-drop-(.+)$/);
+  const match = notificationId.match(/^bas-price-drop-([A-Z0-9]{10})$/i);
   if (match) {
     const asin = match[1];
     const url = `https://www.amazon.com/dp/${asin}`;
