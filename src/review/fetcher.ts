@@ -1,4 +1,5 @@
 import type { HistogramData, ProductReviewData, ReviewData, ReviewMedia, ReviewMediaGallery } from "./types";
+import { $, $$, REVIEW } from "../selectors";
 
 const TAG = "[BAS]";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -9,7 +10,7 @@ const MAX_REVIEWS = 10;
 // ---------------------------------------------------------------------------
 
 export function parseHistogram(doc: Document): HistogramData | null {
-  const table = doc.querySelector("#histogramTable") ?? doc.querySelector("table#histogramTable");
+  const table = $(doc, ...REVIEW.histogram);
   if (!table) return null;
 
   const rows = table.querySelectorAll("tr");
@@ -53,7 +54,7 @@ function parsePercentage(text: string): number | null {
 // ---------------------------------------------------------------------------
 
 export function parseReviews(doc: Document): ReviewData[] {
-  const reviewEls = doc.querySelectorAll('div[data-hook="review"], div.review');
+  const reviewEls = $$(doc, ...REVIEW.reviewContainer);
   const reviews: ReviewData[] = [];
 
   for (const el of reviewEls) {
@@ -73,8 +74,7 @@ export function parseReviews(doc: Document): ReviewData[] {
 
 function parseReviewRating(el: Element): number {
   const iconAlt =
-    el.querySelector<HTMLElement>('i[data-hook="review-star-rating"] span.a-icon-alt') ??
-    el.querySelector<HTMLElement>("i.review-rating span.a-icon-alt");
+    $(el, ...REVIEW.reviewRating) as HTMLElement | null;
   if (iconAlt?.textContent) {
     const match = /([\d.]+)\s+out\s+of\s+5/i.exec(iconAlt.textContent);
     if (match) return Number(match[1]);
@@ -83,14 +83,12 @@ function parseReviewRating(el: Element): number {
 }
 
 function parseReviewText(el: Element): string {
-  const body =
-    el.querySelector<HTMLElement>('span[data-hook="review-body"] span') ??
-    el.querySelector<HTMLElement>('span[data-hook="review-body"]');
+  const body = $(el, ...REVIEW.reviewBody) as HTMLElement | null;
   return body?.textContent?.trim() ?? "";
 }
 
 function parseReviewDate(el: Element): Date {
-  const dateEl = el.querySelector<HTMLElement>('span[data-hook="review-date"]');
+  const dateEl = $(el, ...REVIEW.reviewDate) as HTMLElement | null;
   if (dateEl?.textContent) {
     // "Reviewed in the United States on January 15, 2024"
     const match = /on\s+(.+)$/i.exec(dateEl.textContent.trim());
@@ -103,13 +101,13 @@ function parseReviewDate(el: Element): Date {
 }
 
 function isVerifiedPurchase(el: Element): boolean {
-  if (el.querySelector('span[data-hook="avp-badge"]')) return true;
+  if ($(el, ...REVIEW.verifiedPurchase)) return true;
   const text = el.textContent ?? "";
   return /verified\s+purchase/i.test(text);
 }
 
 function parseHelpfulVotes(el: Element): number {
-  const helpfulEl = el.querySelector<HTMLElement>('span[data-hook="helpful-vote-statement"]');
+  const helpfulEl = $(el, ...REVIEW.helpfulVotes) as HTMLElement | null;
   if (helpfulEl?.textContent) {
     const match = /([\d,]+)\s+(?:people|person)/i.exec(helpfulEl.textContent);
     if (match) return Number(match[1].replace(/,/g, ""));
@@ -132,9 +130,7 @@ function parseReviewMediaItems(el: Element, rating: number, verified: boolean): 
   const seen = new Set<string>();
 
   // Strategy 1: review-image-tile (most common)
-  const imageTiles = el.querySelectorAll<HTMLImageElement>(
-    'img.review-image-tile, img[data-hook="review-image-tile"]',
-  );
+  const imageTiles = $$(el, ...REVIEW.reviewImages) as HTMLImageElement[];
   for (const img of imageTiles) {
     const thumb = img.src || img.getAttribute("data-src") || "";
     if (!thumb || seen.has(thumb)) continue;
@@ -175,9 +171,7 @@ function parseReviewMediaItems(el: Element, rating: number, verified: boolean): 
   }
 
   // Strategy 4: video tiles
-  const videoTiles = el.querySelectorAll<HTMLElement>(
-    'div[data-hook="review-video-tile"], video, [data-video-url]',
-  );
+  const videoTiles = $$(el, ...REVIEW.reviewVideos);
   for (const tile of videoTiles) {
     const videoUrl =
       tile.getAttribute("data-video-url") ||
@@ -206,7 +200,7 @@ function parseReviewMediaItems(el: Element, rating: number, verified: boolean): 
  * Scans review elements and collects images/videos.
  */
 export function parseReviewMediaGallery(doc: Document): ReviewMediaGallery {
-  const reviewEls = doc.querySelectorAll('div[data-hook="review"], div.review');
+  const reviewEls = $$(doc, ...REVIEW.reviewContainer);
   const allItems: ReviewMedia[] = [];
   let reviewsWithMedia = 0;
 
@@ -221,7 +215,7 @@ export function parseReviewMediaGallery(doc: Document): ReviewMediaGallery {
   }
 
   // Also check for top-level image gallery section (outside individual reviews)
-  const topGallery = doc.querySelector('#cr-media-gallery-popover, [data-hook="cr-media-gallery"]');
+  const topGallery = $(doc, ...REVIEW.mediaGallery);
   if (topGallery) {
     const imgs = topGallery.querySelectorAll<HTMLImageElement>("img");
     const seen = new Set(allItems.map((i) => i.thumbnailUrl));
@@ -243,9 +237,7 @@ export function parseReviewMediaGallery(doc: Document): ReviewMediaGallery {
 // ---------------------------------------------------------------------------
 
 export function parseTotalRatings(doc: Document): number {
-  const el =
-    doc.querySelector<HTMLElement>('span[data-hook="total-review-count"]') ??
-    doc.querySelector<HTMLElement>("#acrCustomerReviewText");
+  const el = $(doc, ...REVIEW.totalRatings) as HTMLElement | null;
   if (el?.textContent) {
     const match = /([\d,]+)\s+(?:global\s+)?ratings?/i.exec(el.textContent);
     if (match) return Number(match[1].replace(/,/g, ""));

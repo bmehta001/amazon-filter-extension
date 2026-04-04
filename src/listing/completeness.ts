@@ -35,6 +35,8 @@ export interface ListingCompleteness {
   missingImportantCount: number;
 }
 
+import { $, $$, LISTING } from "../selectors";
+
 // ── Field Detection ──────────────────────────────────────────────────
 
 /** All fields we can detect on a product detail page. */
@@ -82,19 +84,13 @@ const FIELD_DETECTORS: { id: string; label: string; detect: (doc: Document) => b
   {
     id: "spec-table",
     label: "Specifications Table",
-    detect: (doc) => {
-      const tables = doc.querySelectorAll(
-        "#productDetails_techSpec_section_1, #technicalSpecifications_section_1, " +
-        "#prodDetails table, .a-normal.a-spacing-micro",
-      );
-      return tables.length > 0;
-    },
+    detect: (doc) => $$(doc, ...LISTING.specTable).length > 0,
   },
   {
     id: "description",
     label: "Product Description",
     detect: (doc) => {
-      const desc = doc.querySelector("#productDescription, #aplus, .aplus-v2");
+      const desc = $(doc, ...LISTING.description);
       if (!desc) return false;
       const text = desc.textContent?.trim() || "";
       return text.length > 50;
@@ -103,44 +99,27 @@ const FIELD_DETECTORS: { id: string; label: string; detect: (doc: Document) => b
   {
     id: "images",
     label: "Multiple Images (3+)",
-    detect: (doc) => {
-      const thumbs = doc.querySelectorAll(
-        "#altImages img, .imageThumbnail img, #imageBlock img",
-      );
-      return thumbs.length >= 3;
-    },
+    detect: (doc) => $$(doc, ...LISTING.images).length >= 3,
   },
   {
     id: "bullet-points",
     label: "Feature Bullet Points",
-    detect: (doc) => {
-      const bullets = doc.querySelectorAll("#feature-bullets li, .a-unordered-list.a-vertical li");
-      return bullets.length >= 3;
-    },
+    detect: (doc) => $$(doc, ...LISTING.bulletPoints).length >= 3,
   },
 ];
 
 /** Check if a detail table/section contains a row matching the pattern. */
 function hasDetailField(doc: Document, pattern: RegExp): boolean {
   // Strategy 1: Product details tables
-  const tables = doc.querySelectorAll(
-    "#prodDetails tr, #detailBullets_feature_div li, " +
-    "#productDetails_detailBullets_sections1 tr, " +
-    ".content-grid-block tr, .detail-bullet-list span",
-  );
+  const tables = $$(doc, ...LISTING.detailTables);
   for (const el of tables) {
-    const text = el.textContent || "";
-    if (pattern.test(text)) return true;
+    if (pattern.test(el.textContent || "")) return true;
   }
 
   // Strategy 2: Tech spec table
-  const techRows = doc.querySelectorAll(
-    "#technicalSpecifications_section_1 tr, " +
-    "#productDetails_techSpec_section_1 tr",
-  );
+  const techRows = $$(doc, ...LISTING.techSpec);
   for (const row of techRows) {
-    const text = row.textContent || "";
-    if (pattern.test(text)) return true;
+    if (pattern.test(row.textContent || "")) return true;
   }
 
   return false;
@@ -148,7 +127,7 @@ function hasDetailField(doc: Document, pattern: RegExp): boolean {
 
 /** Check if a named section exists with content. */
 function hasSection(doc: Document, pattern: RegExp): boolean {
-  const headings = doc.querySelectorAll("h1, h2, h3, h4, h5, .a-text-bold");
+  const headings = $$(doc, ...LISTING.headings);
   for (const h of headings) {
     const text = h.textContent || "";
     if (pattern.test(text)) {

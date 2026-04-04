@@ -1,30 +1,13 @@
 import type { Product, CouponInfo } from "../types";
 import { parseCount, parseRating, parsePrice, extractAsin } from "../util/parse";
 import { isLearnedBrand } from "../brand/learning";
-
-// ── Amazon DOM selectors (centralized for easy updates) ──────────────
-
-const SELECTORS = {
-  /** Top-level product card container. */
-  productCard: 'div[data-component-type="s-search-result"]',
-  /** Title text span (multiple patterns for different Amazon layouts). */
-  titleText: "h2 a span, h2 span.a-text-normal, h2.a-text-normal > span, h2 > span",
-  /** Star rating text (inside icon-alt spans within star icons). */
-  rating:
-    'i[class*="a-icon-star"] span.a-icon-alt, ' +
-    'a[aria-label*="out of 5 stars"], ' +
-    'span[aria-label*="star"]',
-  /** Price (offscreen or visible). */
-  price: "span.a-price span.a-offscreen, span.a-price-whole",
-  /** Price fraction (cents). */
-  priceFraction: "span.a-price-fraction",
-} as const;
+import { $, $$, SEARCH } from "../selectors";
 
 /**
  * Extract all product cards from the current page.
  */
 export function getProductCards(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.productCard));
+  return $$(document, ...SEARCH.productCard) as HTMLElement[];
 }
 
 /**
@@ -70,13 +53,13 @@ export function extractAllProducts(): Product[] {
 // ── Private extraction helpers ───────────────────────────────────────
 
 function extractTitle(card: HTMLElement): string {
-  const el = card.querySelector(SELECTORS.titleText);
+  const el = $(card, ...SEARCH.titleText);
   return el?.textContent?.trim() || "";
 }
 
 function extractReviewCount(card: HTMLElement): number {
   // Priority 1: link to customer reviews (most reliable)
-  const reviewLink = card.querySelector<HTMLAnchorElement>('a[href*="customerReviews"]');
+  const reviewLink = $(card, ...SEARCH.reviewLink) as HTMLAnchorElement | null;
   if (reviewLink) {
     const linkSpan = reviewLink.querySelector("span");
     const text = (linkSpan?.textContent || reviewLink.textContent || "").trim();
@@ -110,19 +93,19 @@ function extractReviewCount(card: HTMLElement): number {
 
 function extractRating(card: HTMLElement): number {
   // Try aria-label first (more reliable)
-  const starEl = card.querySelector(SELECTORS.rating);
+  const starEl = $(card, ...SEARCH.rating);
   const ariaLabel =
     starEl?.getAttribute("aria-label") || starEl?.textContent || "";
   return parseRating(ariaLabel);
 }
 
 function extractPrice(card: HTMLElement): number | null {
-  const offscreen = card.querySelector("span.a-price span.a-offscreen");
+  const offscreen = $(card, "span.a-price span.a-offscreen");
   if (offscreen?.textContent) {
     return parsePrice(offscreen.textContent);
   }
-  const whole = card.querySelector("span.a-price-whole");
-  const fraction = card.querySelector(SELECTORS.priceFraction);
+  const whole = $(card, "span.a-price-whole");
+  const fraction = $(card, ...SEARCH.priceFraction);
   if (whole?.textContent) {
     const priceStr = `${whole.textContent}${fraction?.textContent || "00"}`;
     return parsePrice(priceStr);
@@ -264,7 +247,7 @@ function extractBrand(card: HTMLElement, title: string): string {
 
   // Strategy 6: URL slug extraction.
   // Amazon product URLs follow /Brand-Product-Words/dp/ASIN/ — first word is the brand.
-  const productLink = card.querySelector<HTMLAnchorElement>('h2 a[href*="/dp/"]');
+  const productLink = $(card, ...SEARCH.productLink) as HTMLAnchorElement | null;
   if (productLink) {
     const slugMatch = productLink.getAttribute("href")?.match(/\/([^/]+)\/dp\//);
     if (slugMatch) {
@@ -294,7 +277,7 @@ function extractBrand(card: HTMLElement, title: string): string {
  */
 export function extractBrandCandidate(card: HTMLElement, title: string): string | null {
   // Check URL slug
-  const productLink = card.querySelector<HTMLAnchorElement>('h2 a[href*="/dp/"]');
+  const productLink = $(card, ...SEARCH.productLink) as HTMLAnchorElement | null;
   if (productLink) {
     const slugMatch = productLink.getAttribute("href")?.match(/\/([^/]+)\/dp\//);
     if (slugMatch) {
@@ -317,27 +300,17 @@ export function extractBrandCandidate(card: HTMLElement, title: string): string 
 }
 
 function detectSponsored(card: HTMLElement): boolean {
-  // 1. Modern ads metrics component
-  if (card.querySelector('span[data-component-type="s-ads-metrics"]')) {
-    return true;
+  // Check all known sponsored indicator selectors
+  for (const sel of SEARCH.sponsored) {
+    if (card.querySelector(sel)) return true;
   }
 
-  // 2. Newer sponsored result marker
-  if (card.querySelector('[data-component-type="sp-sponsored-result"]')) {
-    return true;
-  }
-
-  // 3. Ad holder containers
-  if (card.querySelector("div.AdHolder, div.s-ad-holder")) {
-    return true;
-  }
-
-  // 4. Data attributes on the card itself
+  // Data attributes on the card itself
   if (card.dataset.isSponsored === "true" || card.dataset.sponsored === "true") {
     return true;
   }
 
-  // 5. Aria-labels containing "Sponsored"
+  // Aria-labels containing "Sponsored"
   const ariaEls = card.querySelectorAll("[aria-label]");
   for (const el of ariaEls) {
     const label = el.getAttribute("aria-label") || "";
@@ -374,7 +347,7 @@ function extractAsinFromLinks(card: HTMLElement): string | null {
  */
 export function extractListPrice(card: HTMLElement): number | null {
   // Strategy 1: [data-strikethroughprice] .a-text-strike
-  const strikeEl = card.querySelector("[data-strikethroughprice] .a-text-strike");
+  const strikeEl = $(card, ...SEARCH.listPrice);
   if (strikeEl?.textContent) {
     return parsePrice(strikeEl.textContent);
   }
@@ -399,7 +372,7 @@ export function extractListPrice(card: HTMLElement): number | null {
  * Amazon shows coupons as "Save X% with coupon" or "Save $X.XX with coupon".
  */
 export function extractCoupon(card: HTMLElement): CouponInfo | null {
-  const couponEl = card.querySelector('[data-component-type="s-coupon-component"]');
+  const couponEl = $(card, ...SEARCH.coupon);
   if (!couponEl) return null;
 
   const text = couponEl.textContent || "";
