@@ -61,6 +61,7 @@ import { loadLicense, onLicenseChanged } from "../licensing/license";
 import type { LicenseTier } from "../licensing/license";
 import { isFeatureAvailable, getFeatureTeaser } from "../licensing/featureGate";
 import { isReleased } from "../releaseSchedule";
+import { loadRemoteSelectors } from "../selectors";
 import { trackProductsAnalyzed, trackSuspiciousListing, trackInflatedPrice, trackSavings, trackSearchEnhanced, trackRecallDetected } from "../insights/dashboard";
 import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
 import type { ProductScoreInput } from "./ui/productScore";
@@ -240,9 +241,10 @@ async function main(): Promise<void> {
   // Inject global styles
   injectGlobalStyles();
 
-  // Load saved filters, preferences, brand allowlist, learned brands, and license concurrently
+  // Load saved filters, preferences, brand allowlist, learned brands, license, and remote selectors concurrently
   const [filters, prefs, , , license] = await Promise.all([
     loadFilters(), loadPreferences(), initAllowlist(), loadLearnedBrands(), loadLicense(),
+    loadRemoteSelectors(), // Non-blocking: falls back to built-in selectors on failure
   ]);
   currentFilters = filters;
   currentPrefs = prefs;

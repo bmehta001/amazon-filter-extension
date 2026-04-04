@@ -6,15 +6,107 @@
  *
  * Each selector group provides multiple fallbacks tried in order.
  * The first match wins. Add new patterns at the end of each array.
+ *
+ * REMOTE OVERRIDE: On init, the extension fetches a selector patch
+ * JSON from a hosted URL. This allows fixing broken selectors without
+ * pushing a Chrome Web Store update (which takes 1-3 days for review).
+ * The remote patch is cached in chrome.storage.local with a 1h TTL.
  */
+
+// ── Remote Override System ───────────────────────────────────────────
+
+const REMOTE_SELECTOR_URL = "https://betteramazonsearch.com/selectors.json";
+const REMOTE_CACHE_KEY = "bas_selector_overrides";
+const REMOTE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+/** Remotely-loaded selector overrides. Applied on top of built-in selectors. */
+let remoteOverrides: Record<string, Record<string, string[]>> = {};
+
+/**
+ * Load remote selector overrides. Call once on extension init.
+ * Non-blocking — if the fetch fails, built-in selectors are used.
+ */
+export async function loadRemoteSelectors(): Promise<void> {
+  try {
+    // Check cache first
+    const cached = await getCachedOverrides();
+    if (cached) {
+      remoteOverrides = cached;
+      return;
+    }
+
+    // Fetch fresh overrides
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(REMOTE_SELECTOR_URL, {
+      signal: controller.signal,
+      cache: "no-cache",
+    });
+    clearTimeout(timer);
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    if (data && typeof data === "object") {
+      remoteOverrides = data;
+      await cacheOverrides(data);
+    }
+  } catch {
+    // Silent failure — built-in selectors are the fallback
+  }
+}
+
+async function getCachedOverrides(): Promise<Record<string, Record<string, string[]>> | null> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(REMOTE_CACHE_KEY, (result) => {
+        if (chrome.runtime.lastError || !result[REMOTE_CACHE_KEY]) {
+          resolve(null);
+          return;
+        }
+        const cached = result[REMOTE_CACHE_KEY] as { data: Record<string, Record<string, string[]>>; ts: number };
+        if (Date.now() - cached.ts > REMOTE_CACHE_TTL_MS) {
+          resolve(null); // Expired
+          return;
+        }
+        resolve(cached.data);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function cacheOverrides(data: Record<string, Record<string, string[]>>): Promise<void> {
+  try {
+    await chrome.storage.local.set({
+      [REMOTE_CACHE_KEY]: { data, ts: Date.now() },
+    });
+  } catch { /* ignore */ }
+}
+
+/**
+ * Get the effective selectors for a group.key, merging remote overrides.
+ * Remote overrides PREPEND to the built-in list (tried first).
+ */
+function getSelectors(group: string, key: string, builtIn: readonly string[]): string[] {
+  const override = remoteOverrides[group]?.[key];
+  if (override && Array.isArray(override) && override.length > 0) {
+    // Remote overrides are tried first, then built-in fallbacks
+    return [...override, ...builtIn];
+  }
+  return [...builtIn];
+}
 
 // ── Selector Helper ──────────────────────────────────────────────────
 
 /** Try multiple selectors in order, return the first match. */
 export function $(el: ParentNode, ...selectors: string[]): Element | null {
   for (const sel of selectors) {
-    const result = el.querySelector(sel);
-    if (result) return result;
+    try {
+      const result = el.querySelector(sel);
+      if (result) return result;
+    } catch { /* invalid selector — skip */ }
   }
   return null;
 }
@@ -22,10 +114,21 @@ export function $(el: ParentNode, ...selectors: string[]): Element | null {
 /** Try multiple selectors in order, return the first non-empty result. */
 export function $$(el: ParentNode, ...selectors: string[]): Element[] {
   for (const sel of selectors) {
-    const results = el.querySelectorAll(sel);
-    if (results.length > 0) return Array.from(results);
+    try {
+      const results = el.querySelectorAll(sel);
+      if (results.length > 0) return Array.from(results);
+    } catch { /* invalid selector — skip */ }
   }
   return [];
+}
+
+/**
+ * Resolve selectors with remote overrides merged in.
+ * Usage: sel("SEARCH", "productCard", SEARCH.productCard)
+ * Remote overrides for "SEARCH.productCard" are prepended to the array.
+ */
+export function sel(group: string, key: string, builtIn: readonly string[]): string[] {
+  return getSelectors(group, key, builtIn);
 }
 
 // ── Search Results Page ──────────────────────────────────────────────
