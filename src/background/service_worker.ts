@@ -2,6 +2,7 @@ import { refreshAllowlistFromRemote } from "../brand/allowlist";
 import { checkWatchlistPrices, WATCHLIST_ALARM_NAME, WATCHLIST_CHECK_INTERVAL_MINUTES } from "../watchlist/checker";
 import { loadNotificationPrefs } from "../watchlist/storage";
 import { markWelcomeSeen } from "../onboarding/state";
+import { initUsageOnInstall } from "../insights/usageTracker";
 
 const ALARM_NAME = "refreshBrandAllowlist";
 const REFRESH_INTERVAL_MINUTES = 1440; // 24 hours
@@ -58,6 +59,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Open onboarding welcome page on first install
   if (details.reason === "install") {
     await markWelcomeSeen();
+    await initUsageOnInstall();
     chrome.tabs.create({ url: chrome.runtime.getURL("src/onboarding/onboarding.html") });
   }
 });

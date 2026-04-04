@@ -2,6 +2,7 @@ import { loadPreferences, savePreferences } from "../util/storage";
 import { loadWatchlist, removeFromWatchlist, updateTargetPrice, loadNotificationPrefs, saveNotificationPrefs } from "../watchlist/storage";
 import type { WatchlistItem, NotificationPreferences, PriceSnapshot } from "../watchlist/storage";
 import { getCurrentMonthInsights } from "../insights/dashboard";
+import { recordPopupOpen } from "../insights/usageTracker";
 import {
   loadShortlists,
   createShortlist,
@@ -128,6 +129,7 @@ function inferBandwidthPreset(prefs: GlobalPreferences): BandwidthPreset {
 }
 
 async function init(): Promise<void> {
+  void recordPopupOpen();
   const els = getElements();
   currentPrefs = await loadPreferences();
   renderPrefs(els, currentPrefs);

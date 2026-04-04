@@ -6,6 +6,7 @@
 
 import type { FeatureId } from "../../licensing/featureGate";
 import { getFeatureLabel } from "../../licensing/featureGate";
+import { recordProLockClick } from "../../insights/usageTracker";
 import { COLORS, RADII, FONT } from "./designTokens";
 
 const LOCK_CLASS = "bas-pro-lock";
@@ -68,6 +69,7 @@ export function createProLockBadge(
   badge.addEventListener("click", (e) => {
     e.stopPropagation();
     e.preventDefault();
+    void recordProLockClick(feature);
     if (paymentUrl) {
       window.open(paymentUrl, "_blank", "noopener");
     } else {

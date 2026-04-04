@@ -63,6 +63,7 @@ import { isFeatureAvailable, getFeatureTeaser } from "../licensing/featureGate";
 import { isReleased } from "../releaseSchedule";
 import { loadRemoteSelectors } from "../selectors";
 import { trackProductsAnalyzed, trackSuspiciousListing, trackInflatedPrice, trackSavings, trackSearchEnhanced, trackRecallDetected } from "../insights/dashboard";
+import { recordSession, initUsageOnInstall } from "../insights/usageTracker";
 import { injectProductScore, removeProductScore, PRODUCT_SCORE_STYLES } from "./ui/productScore";
 import type { ProductScoreInput } from "./ui/productScore";
 import { injectPriceIntel, PRICE_INTEL_STYLES } from "./ui/priceIntel";
@@ -620,6 +621,7 @@ async function filterAllProducts(): Promise<void> {
   // Track insights (non-blocking, fire-and-forget)
   void trackSearchEnhanced();
   void trackProductsAnalyzed(products.length);
+  void recordSession();
 }
 
 /**
@@ -768,6 +770,9 @@ function renderFilterResults(
         const dealScore = computeDealScore(product);
         if (dealScore) {
           if (product.asin) dealScoreMap.set(product.asin, dealScore.score);
+          if (dealScore.label === "Inflated Pricing" || dealScore.label === "Suspicious Discount") {
+            void trackInflatedPrice();
+          }
         }
 
         // Build unified price intelligence line
@@ -779,6 +784,7 @@ function renderFilterResults(
         if (stack && stack.layers.some(l => l.amount > 0)) {
           priceIntelInput.savingsPercent = stack.totalPercent;
           priceIntelInput.effectivePrice = stack.effectivePrice;
+          void trackSavings(stack.totalAmount);
           priceIntelInput.savingsTooltip = stack.layers
             .filter(l => l.amount > 0)
             .map(l => `${l.label}: -$${l.amount.toFixed(2)}`)
@@ -1199,6 +1205,7 @@ function queueReviewAnalysis(products: Product[]): void {
           // Compute trust score
           const trustResult = computeTrustScore(reviewData, insights.categorizedReviews);
           trustScoreMap.set(asin, trustResult);
+          if (trustResult.score < 50) void trackSuspiciousListing();
 
           // Update unified product score badge
           injectConfidenceBadgeForProduct(asin, product.element);
@@ -1438,6 +1445,7 @@ async function queueRecallCheck(): Promise<void> {
       );
       if (matches.length > 0) {
         injectRecallBadge(product.element, matches);
+        void trackRecallDetected();
       }
     }
   } catch (err) {
