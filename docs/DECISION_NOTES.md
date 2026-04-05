@@ -195,39 +195,41 @@ WHY behind every major design decision, trade-off, and tool choice.
 
 ### Data Architecture Comparison
 
-| Extension | Client-Side | Server-Side | Backend Cost |
-|-----------|-------------|-------------|-------------|
-| **Better Amazon Search** | ✅ All analysis | Planned (crowd cache) | $0 today, $0-5/mo planned |
-| **Keepa** | Price display only | ✅ Price history DB | High (massive DB) |
-| **ReviewMeta** | Display only | ✅ Review analysis | Medium |
-| **CamelCamelCamel** | Display only | ✅ Price tracking | Medium |
-| **Honey** | Coupon injection | ✅ Coupon DB + deal comparison | Very high (PayPal-funded) |
-| **RateBud** | ✅ Analysis | Some server validation | Low |
+| Extension | Client-Side | Server-Side | Backend Cost | Installs | Rating |
+|-----------|-------------|-------------|-------------|----------|--------|
+| **Better Amazon Search** | ✅ All analysis | Planned (crowd cache) | $0 today | Pre-launch | N/A |
+| **Keepa** | Price display + iframe | ✅ Price history DB (keepa.com) | High (massive DB) | 4,000,000 | 4.7★ |
+| **ReviewMeta** | Display only | ✅ Review analysis (web app) | Medium | ~15,000 (Edge) | 3.1★ |
+| **CamelCamelCamel** | Popup only (no content script) | ✅ Price tracking | Medium | 800,000 | 4.3★ |
+| **Honey** | Coupon injection (broad host access) | ✅ Coupon DB + deal comparison | Very high (PayPal) | 13,000,000 | 4.6★ |
+| **RateBud** | Trust badge display | ✅ API at ratebud.ai | Low | 1,000 | 4.3★ |
 
 ### Freemium Model Comparison
 
 | Extension | Free Tier | Paid Tier | Price |
 |-----------|-----------|-----------|-------|
 | **Better Amazon Search** | Filters, simple review grade | ML analysis, deal scoring, watchlist, export, etc. | $4.99/mo, $39.99/yr |
-| **Keepa** | Basic price chart | Full history, API access | ~$2/mo |
+| **Keepa** | Basic price chart | Full history, API, data export | **~€19/mo** (~$21/mo) |
 | **ReviewMeta** | Full analysis | N/A (fully free) | Free |
 | **CamelCamelCamel** | Full tracking | N/A (fully free) | Free (ad-supported) |
-| **Honey** | Full features | N/A (affiliate-funded) | Free |
-| **RateBud** | Basic grades | Unknown | Free with ads? |
+| **Honey** | Full features | N/A (affiliate-funded) | Free (collects user data) |
+| **RateBud** | Full grades | N/A (no paid tier found) | Free |
 
 ### Privacy Comparison
 
-| Extension | Data Collection | Server Calls | User Tracking |
+| Extension | Data Collection | Permissions | User Tracking |
 |-----------|----------------|-------------|---------------|
-| **Better Amazon Search** | None (local only) | CPSC recalls only | None |
-| **Keepa** | Price observations sent to server | Every page load | Anonymous price data |
-| **ReviewMeta** | URL/ASIN sent to server | Per analysis request | IP + ASIN logged |
-| **Honey** | Purchase data, browsing on retail sites | Extensive | User profiles for targeting |
-| **RateBud** | Unknown | Unknown | Unknown |
+| **Better Amazon Search** | None (local only) | storage, alarms, notifications, declarativeContent | None |
+| **Keepa** | Price data to keepa.com | +cookies, webRequest, offscreen, contextMenus | Anonymous price observations |
+| **ReviewMeta** | URL/ASIN to server | Unclear from CWS listing | IP + ASIN logged |
+| **Honey** | **PII, payment info, location, web history, user activity** | Broad http/https, cookies, webRequest, unlimitedStorage | Google Analytics, full user profiles |
+| **RateBud** | ASIN to ratebud.ai API | Amazon + ratebud.ai hosts | Says no collection |
 
-### Key Learning from Comparison
+### Key Learnings from Comparison
 
 1. **We're the only all-in-one**: No competitor combines filters + review analysis + deal scoring + price tracking + recall safety. This is the bundling play (Ben Thompson).
-2. **We're the only privacy-first**: Every competitor with a backend sends user data to servers. Our "zero collection" positioning is unique and defensible.
-3. **Free competitors set the floor**: ReviewMeta and CamelCamelCamel are fully free. Our Pro tier must offer clearly differentiated value (ML analysis, deal scoring, watchlist alerts) to justify charging.
-4. **Keepa's $2/mo validates willingness to pay**: Amazon shoppers will pay for tools. Our $4.99/mo is higher but offers 10x more features.
+2. **We're the only privacy-first**: Honey collects PII, payment info, location, and web history. Our "zero collection" positioning is a genuine moat.
+3. **Keepa validates premium pricing**: At ~€19/mo for JUST price charts, our $4.99/mo for 18+ features is aggressively underpriced. Room to raise.
+4. **RateBud validates our architecture**: They also use a server API for pre-computed trust scores (similar to our planned crowd cache). With only 1,000 users, they prove the market exists but the Fakespot vacuum isn't filled yet.
+5. **Honey's 13M users prove the market**: But Honey's privacy practices are a liability. We can differentiate by doing more with less data collection.
+6. **CamelCamelCamel hasn't updated since 2024**: Stale competitor = opportunity. Their popup-only UX is inferior to our inline injection.
