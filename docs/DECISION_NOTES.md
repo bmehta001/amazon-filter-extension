@@ -288,12 +288,38 @@ Never claim absolute privacy ("zero" / "100%") without a line-by-line audit of e
 - Login enables **account-level bans** for persistent bad actors
 - The core extension experience (filters, basic review grades, sorting) still works without login
 
-**Rate limits by tier**:
-| Tier | Cache Lookups/hr | Contributions/hr |
-|------|-----------------|-------------------|
-| Free (logged in) | 100 | 50 |
-| Pro | 500 | 200 |
-| Anonymous | None | None |
+**Rate limits by tier** (revised from initial proposal based on actual usage math):
+
+A typical search page has 20-60 products. After local filters, ~10-30 need cache lookup.
+At 2-3 searches/session: ~60-180 ASINs per hour = 3-6 batch API calls.
+
+| Tier | Cache Lookups/hr | Contributions/hr | Rationale |
+|------|-----------------|-------------------|-----------|
+| Free (logged in) | 50 | Smart-filtered only | ~2-3 search pages/hr, sufficient for normal shopping |
+| Pro | Unlimited | Smart-filtered only | Paying customers should never hit walls |
+| Anonymous | None | None | Must log in to access server features |
+
+**Smart contribution filtering** (don't contribute every analysis):
+
+Only submit a contribution when ALL of these are true:
+1. `totalRatings` differs from cached value (reviews actually changed — prevents redundant writes)
+2. Contributor reputation weight > 0.1 (not shadowbanned)
+3. Product has ≥10 reviews (enough signal for meaningful analysis)
+4. Score differs from current EMA by ≥2 points (material change, not noise)
+
+This reduces D1 writes by ~70-80% while improving cache quality. Like Waze — not every GPS ping becomes a traffic report, only meaningful deltas.
+
+**Login communication** (product strategist decision):
+
+Frame as speed upgrade, not gate. Show inline banner AFTER local analysis completes:
+> "✨ Next time, get instant results — sign in to access community cache"
+
+User already got value (local analysis worked). Login makes it faster, not possible. Never block the core experience.
+
+**Rate limit messaging** (when free user hits 50/hr):
+> "⏳ Cache limit reached — local analysis running (~5s). Go Pro for unlimited instant results."
+
+Three principles: (1) product still works, (2) cost is tangible (waiting), (3) Pro removes friction.
 
 **Trade-off**: Reduces crowd cache contribution volume vs. fully anonymous approach. Mitigated by the fact that cache lookups (which provide instant results) are the user-facing incentive to create an account.
 
