@@ -16,6 +16,9 @@ WHY behind every major design decision, trade-off, and tool choice.
 9. [Seller Fairness: New Product Detector](#9-seller-fairness)
 10. [Backend: Cloudflare Workers + D1](#10-backend-stack)
 11. [Industry Comparison](#11-industry-comparison)
+12. [Privacy Language: Honest About External Requests](#12-privacy-language)
+13. [Time Saved Metric: Products-Based Estimation](#13-time-saved-metric)
+14. [Crowd Cache Gating: Login Required](#14-crowd-cache-gating)
 
 ---
 
@@ -233,3 +236,65 @@ WHY behind every major design decision, trade-off, and tool choice.
 4. **RateBud validates our architecture**: They also use a server API for pre-computed trust scores (similar to our planned crowd cache). With only 1,000 users, they prove the market exists but the Fakespot vacuum isn't filled yet.
 5. **Honey's 13M users prove the market**: But Honey's privacy practices are a liability. We can differentiate by doing more with less data collection.
 6. **CamelCamelCamel hasn't updated since 2024**: Stale competitor = opportunity. Their popup-only UX is inferior to our inline injection.
+
+---
+
+## 12. Privacy Language: Honest About External Requests
+
+**Decision**: Stop claiming "100% client-side" and "zero data collection." Replace with honest, specific language about what external requests exist.
+
+**Why**: A code audit revealed that user data DOES leave the browser in several ways:
+- **Search queries** → CPSC SaferProducts.gov (recall checks)
+- **ASINs** → Keepa (price chart images), Amazon (product page fetches)
+- **Product titles** → CamelCamelCamel (when user clicks the link)
+- **Filters/preferences** → Chrome Sync (part of Chrome's infrastructure)
+
+None of these are "data collection" in the tracking/analytics sense, but claiming "100% client-side" is technically false and could erode trust if a user or journalist audits the extension.
+
+**New language**: "Privacy-first design. All analysis runs locally in your browser. We don't collect, store, or transmit any personal data. External requests are limited to: Amazon (pages you're already browsing), CPSC (recall safety checks), and Keepa (price chart images)."
+
+**Trade-off**: Less punchy than "100% client-side" but more defensible. Honesty builds long-term trust — especially for a product whose core value proposition IS trust.
+
+### Learning
+Never claim absolute privacy ("zero" / "100%") without a line-by-line audit of every fetch() call, image embed, and chrome.storage.sync usage in the codebase. External requests are easy to add and forget to disclose.
+
+---
+
+## 13. Time Saved Metric: Products-Based Estimation
+
+**Decision**: Estimate time saved as `productsAnalyzed × 1 minute`. Display in popup insights dashboard.
+
+**Why**: Each product analyzed saves the user from:
+- Clicking into the product page (~15s)
+- Reading 5-8 reviews to form an opinion (~2-3 min)
+- Checking price history externally (~1-2 min)
+- Manual trust assessment (is this brand legit? is the seller trustworthy?)
+
+1 minute per product is a **conservative** estimate. The real savings per product are likely 2-5 minutes for products the user would have investigated manually. But not every analyzed product would have been clicked — many are filtered out at a glance.
+
+**1 minute is the defensible floor** that no one can reasonably argue against.
+
+**Display**: "Time Saved: 5h 47m" in the popup dashboard. Shown alongside Products Analyzed, Suspicious Flagged, and Est. Savings.
+
+---
+
+## 14. Crowd Cache Gating: Login Required
+
+**Decision**: Require login (free or Pro) to access the crowd cache. Anonymous users cannot look up or contribute cached scores.
+
+**Why**:
+- The crowd cache is a **server-side feature with real costs** (D1 reads/writes)
+- Login enables **contributor reputation tracking** (better anti-gaming than UUID-only)
+- Login enables **account-level bans** for persistent bad actors
+- The core extension experience (filters, basic review grades, sorting) still works without login
+
+**Rate limits by tier**:
+| Tier | Cache Lookups/hr | Contributions/hr |
+|------|-----------------|-------------------|
+| Free (logged in) | 100 | 50 |
+| Pro | 500 | 200 |
+| Anonymous | None | None |
+
+**Trade-off**: Reduces crowd cache contribution volume vs. fully anonymous approach. Mitigated by the fact that cache lookups (which provide instant results) are the user-facing incentive to create an account.
+
+**Incremental analysis decision**: NOT implemented. Full re-analysis on each request because reviews change, listings can be hijacked, and statistical signals need the complete review set. The crowd cache serves *results* (not partial data), which is effectively the same benefit without the consistency risks.

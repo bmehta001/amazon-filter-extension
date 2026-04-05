@@ -395,12 +395,23 @@ async function renderInsights(): Promise<void> {
     const analyzed = document.getElementById("insight-analyzed");
     const suspicious = document.getElementById("insight-suspicious");
     const savings = document.getElementById("insight-savings");
-    const drops = document.getElementById("insight-drops");
+    const timeSaved = document.getElementById("insight-drops");
 
     if (analyzed) analyzed.textContent = insights.productsAnalyzed.toLocaleString();
     if (suspicious) suspicious.textContent = insights.suspiciousListingsFlagged.toLocaleString();
     if (savings) savings.textContent = `$${insights.estimatedSavings.toFixed(0)}`;
-    if (drops) drops.textContent = insights.priceDropsCaught.toLocaleString();
+
+    // Time saved: ~1 minute per product analyzed (skip clicking, reading reviews, checking prices)
+    if (timeSaved) {
+      const minutes = insights.productsAnalyzed;
+      if (minutes < 60) {
+        timeSaved.textContent = `${minutes}m`;
+      } else {
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        timeSaved.textContent = mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+      }
+    }
   } catch {
     // Insights may not exist yet
   }

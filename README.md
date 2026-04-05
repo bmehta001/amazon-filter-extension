@@ -2,7 +2,7 @@
 
 **Shop smarter on Amazon — detect fake reviews, score deals, track prices, and compare products with AI-powered analysis.**
 
-> 100% client-side. Zero data collection. No external servers (except CPSC recall lookups). Your shopping data never leaves your browser.
+> Privacy-first design. All analysis runs locally in your browser. We don't collect, store, or transmit any personal data.
 
 <!-- TODO: Add hero screenshot
 ![Better Amazon Search in action](docs/screenshots/hero.png)
@@ -180,9 +180,13 @@ Minimum versions are set by CSS `:has()` (Chrome 105+) and MV3 service workers (
 
 ## Privacy
 
-- **100% client-side analysis** — all review scoring, deal analysis, and filtering runs in your browser
-- **Zero data collection** — no analytics, no telemetry, no user tracking
-- **No external servers** — the only network call is to the [CPSC SaferProducts.gov API](https://www.saferproducts.gov/) for product recall checks
+- **Privacy-first analysis** — all review scoring, deal analysis, and filtering runs locally in your browser
+- **No personal data collection** — no analytics, no telemetry, no user tracking, no accounts required
+- **Minimal external requests** — product analysis is local; external calls are limited to:
+  - Amazon pages you're already browsing (product details for enrichment)
+  - [CPSC SaferProducts.gov](https://www.saferproducts.gov/) for recall safety checks (sends product names)
+  - [Keepa](https://keepa.com/) for price history chart images (sends ASIN)
+  - A hosted JSON file for emergency selector updates (sends no user data)
 - **Isolated storage** — enrichment cache uses `chrome.storage.session` (not `sessionStorage`) so Amazon's JavaScript cannot read your analysis data
 - **No remotely hosted code** — everything is bundled in the extension
 
