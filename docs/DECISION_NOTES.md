@@ -317,9 +317,21 @@ Frame as speed upgrade, not gate. Show inline banner AFTER local analysis comple
 User already got value (local analysis worked). Login makes it faster, not possible. Never block the core experience.
 
 **Rate limit messaging** (when free user hits 50/hr):
-> "⏳ Cache limit reached — local analysis running (~5s). Go Pro for unlimited instant results."
+> "⏳ Cache limit reached — running local analysis. This may take 30-40 seconds as we check each product. Go Pro for unlimited instant results."
 
-Three principles: (1) product still works, (2) cost is tangible (waiting), (3) Pro removes friction.
+Three principles: (1) product still works, (2) cost is tangible (30-40 seconds vs instant), (3) Pro removes the friction.
+
+### Learning: Local analysis timing
+Local analysis takes 3-8 seconds PER PRODUCT (fetch detail page + parse reviews + ML sentiment). For a full search page of 20 products with rate-limited fetching (2 concurrent, 500ms delay), total enrichment takes **30-40 seconds**. The crowd cache serves the same data in **50-200ms** (single batch API call). This 200:1 speed difference is the genuine value proposition for both login and Pro tier.
+
+### Learning: Blockchain consensus parallels
+Our crowd cache faces the same fundamental problem as blockchain oracles — getting trustworthy external data from potentially adversarial contributors. Key concepts adopted:
+- **Proof of Past Reputation (PoPR)**: Weight contributions by historical accuracy alignment, not just volume
+- **Commitment schemes**: Consider requiring score hash submission before revealing current consensus (prevents anchoring)
+- **Cooldown per ASIN**: 24h lockout per contributor per ASIN (prevents grinding)
+- **DecenTruth**: Statistical truth discovery when contributors disagree (complement to EMA)
+
+What we explicitly DON'T adopt: Proof of Work (wasteful), immutable ledger (we want expiration), token economics (incentivizes gaming).
 
 **Trade-off**: Reduces crowd cache contribution volume vs. fully anonymous approach. Mitigated by the fact that cache lookups (which provide instant results) are the user-facing incentive to create an account.
 
